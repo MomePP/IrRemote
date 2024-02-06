@@ -3,8 +3,7 @@
 #include "esp_log.h"
 static const char *TAG = "IrRemote";
 
-#define EXAMPLE_IR_TX_GPIO_NUM 6
-#define EXAMPLE_IR_RX_GPIO_NUM 14
+#define IR_RESOLUTION_HZ 1000000 // 1MHz resolution, 1 tick = 1us
 
 /**
  * @brief Saving NEC decode results
@@ -56,18 +55,23 @@ IrRemote::IrRemote()
 
 IrRemote::~IrRemote() {}
 
-void IrRemote::begin(void)
+void IrRemote::begin(int txPin, int rxPin)
 {
-    remoteRx.begin((gpio_num_t)EXAMPLE_IR_RX_GPIO_NUM, EXAMPLE_IR_RESOLUTION_HZ);
-    remoteTx.begin((gpio_num_t)EXAMPLE_IR_TX_GPIO_NUM, EXAMPLE_IR_RESOLUTION_HZ);
+    _txPin = (gpio_num_t)txPin;
+    _rxPin = (gpio_num_t)rxPin;
 
-    while (1)
-    {
-        // wait for RX done signal
-        // if timeout, transmit predefined IR NEC packets
-        if (!remoteRx.receiveNEC(example_parse_nec_frame, pdMS_TO_TICKS(1000)))
-        {
-            remoteTx.sendNEC(scan_code.address, scan_code.command);
-        }
-    }
+    if (_txPin >= 0)
+        remoteTx.begin(_txPin, IR_RESOLUTION_HZ);
+    if (_rxPin >= 0)
+        remoteRx.begin(_rxPin, IR_RESOLUTION_HZ);
+}
+
+bool IrRemote::testReadIrCode(uint32_t timeout_ms)
+{
+    return remoteRx.receiveNEC(example_parse_nec_frame, pdMS_TO_TICKS(timeout_ms));
+}
+
+bool IrRemote::testSendIrCode(void)
+{
+    return remoteTx.sendNEC(scan_code.address, scan_code.command);
 }

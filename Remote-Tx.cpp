@@ -1,5 +1,6 @@
 #include "Remote-Tx.h"
 
+#include "esp_err.h"
 #include "esp_log.h"
 static const char *TAG = "IrRemoteTx";
 
@@ -53,12 +54,12 @@ void IrRemoteTx::updateCarrierFrequency(uint32_t frequency)
     ESP_ERROR_CHECK(rmt_apply_carrier(_channel, &_carrier_cfg));
 }
 
-void IrRemoteTx::sendNEC(uint16_t address, uint16_t command)
+bool IrRemoteTx::sendNEC(uint16_t address, uint16_t command)
 {
     ESP_LOGI(TAG, "send NEC frame");
     ir_nec_scan_code_t nec_code = {
         .address = address,
         .command = command,
     };
-    ESP_ERROR_CHECK(rmt_transmit(_channel, _encoder, &nec_code, sizeof(nec_code), &_transmit_config));
+    return rmt_transmit(_channel, _encoder, &nec_code, sizeof(nec_code), &_transmit_config) == ESP_OK;
 }

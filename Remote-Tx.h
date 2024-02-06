@@ -16,7 +16,7 @@ public:
     void begin(gpio_num_t tx_gpio_num, uint32_t resolution_hz);
     void updateCarrierFrequency(uint32_t frequency);
 
-    void sendNEC(uint16_t address, uint16_t command);
+    bool sendNEC(uint16_t address, uint16_t command);
 
 private:
     rmt_channel_handle_t _channel;
