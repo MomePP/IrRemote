@@ -1,9 +1,6 @@
 #include "Remote-Rx.h"
 
-#include "Ir-NEC.h"
 #include "esp_log.h"
-#include "freertos/portmacro.h"
-#include "hal/rmt_types.h"
 static const char *TAG = "IrRemoteRx";
 
 IrRemoteRx::IrRemoteRx()
@@ -47,7 +44,7 @@ void IrRemoteRx::begin(gpio_num_t rx_gpio_num, uint32_t resolution_hz)
     ESP_ERROR_CHECK(rmt_receive(_channel, _symbols_buffer, sizeof(_symbols_buffer), &_receive_config));
 }
 
-bool IrRemoteRx::receiveNEC(void (*data_callback)(rmt_symbol_word_t *, size_t), TickType_t timeout)
+bool IrRemoteRx::receiveNEC(ir_code_t *received_code,TickType_t timeout)
 {
     rmt_rx_done_event_data_t rx_data;
 
@@ -56,14 +53,14 @@ bool IrRemoteRx::receiveNEC(void (*data_callback)(rmt_symbol_word_t *, size_t), 
     if (received_status)
     {
         // parse the receive symbols and print the result
-        data_callback(rx_data.received_symbols, rx_data.num_symbols);
+        *received_code = nec_decode_frame(rx_data.received_symbols, rx_data.num_symbols);
         // start receive again
         ESP_ERROR_CHECK(rmt_receive(_channel, _symbols_buffer, sizeof(_symbols_buffer), &_receive_config));
     }
     return received_status;
 }
 
-static bool _rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data)
+bool _rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data)
 {
     BaseType_t high_task_wakeup = pdFALSE;
     QueueHandle_t receive_queue = (QueueHandle_t)user_data;

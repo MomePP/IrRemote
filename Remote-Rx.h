@@ -1,11 +1,11 @@
 #pragma once
 
-#include "Ir-NEC.h"
 #include "driver/rmt_rx.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+
+#include "Ir-NEC.h"
 
 #define IR_RX_SYMBOL_BUF_SIZE 128
 
@@ -19,7 +19,7 @@ public:
 
     void begin(gpio_num_t rx_gpio_num, uint32_t resolution_hz);
 
-    bool receiveNEC(void (*data_callback)(rmt_symbol_word_t*, size_t), TickType_t timeout);
+    bool receiveNEC(ir_code_t *received_code, TickType_t timeout);
 
 private:
     QueueHandle_t _receive_queue;

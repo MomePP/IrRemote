@@ -1,7 +1,7 @@
 #pragma once
 
+#include "IrProtocol.h"
 #include "driver/rmt_encoder.h"
-#include <stdint.h>
 
 /**
  * @brief NEC timing spec
@@ -25,14 +25,7 @@ extern "C"
 {
 #endif
 
-    /**
-     * @brief IR NEC scan code representation
-     */
-    typedef struct
-    {
-        uint16_t address;
-        uint16_t command;
-    } ir_nec_scan_code_t;
+    static ir_code_t s_nec_code;
 
     /**
      * @brief Type of IR NEC encoder configuration
@@ -55,41 +48,9 @@ extern "C"
     esp_err_t rmt_new_ir_nec_encoder(const ir_nec_encoder_config_t *config, rmt_encoder_handle_t *ret_encoder);
 
     /**
-     * @brief Check whether a duration is within expected range
+     * @brief Decode RMT symbols into NEC scan code and print the result
      */
-    static inline bool nec_check_in_range(uint32_t signal_duration, uint32_t spec_duration)
-    {
-        return (signal_duration < (spec_duration + IR_NEC_DECODE_MARGIN)) &&
-               (signal_duration > (spec_duration - IR_NEC_DECODE_MARGIN));
-    }
-
-    /**
-     * @brief Check whether a RMT symbol represents NEC logic zero
-     */
-    static bool nec_parse_logic0(rmt_symbol_word_t *rmt_nec_symbols)
-    {
-        return nec_check_in_range(rmt_nec_symbols->duration0, NEC_PAYLOAD_ZERO_DURATION_0) &&
-               nec_check_in_range(rmt_nec_symbols->duration1, NEC_PAYLOAD_ZERO_DURATION_1);
-    }
-
-    /**
-     * @brief Check whether a RMT symbol represents NEC logic one
-     */
-    static bool nec_parse_logic1(rmt_symbol_word_t *rmt_nec_symbols)
-    {
-        return nec_check_in_range(rmt_nec_symbols->duration0, NEC_PAYLOAD_ONE_DURATION_0) &&
-               nec_check_in_range(rmt_nec_symbols->duration1, NEC_PAYLOAD_ONE_DURATION_1);
-    }
-
-    /**
-     * @brief Decode RMT symbols into NEC address and command
-     */
-    ir_nec_scan_code_t nec_parse_frame(rmt_symbol_word_t *rmt_nec_symbols);
-
-    /**
-     * @brief Check whether the RMT symbols represent NEC repeat code
-     */
-    bool nec_parse_frame_repeat(rmt_symbol_word_t *rmt_nec_symbols);
+    ir_code_t nec_decode_frame(rmt_symbol_word_t *rmt_nec_symbols, size_t symbol_num);
 
 #ifdef __cplusplus
 }

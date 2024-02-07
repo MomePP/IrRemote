@@ -1,7 +1,8 @@
 #pragma once
 
-#include "Ir-NEC.h"
 #include "driver/rmt_tx.h"
+
+#include "Ir-NEC.h"
 
 #define IR_TX_CARRIER_FREQ_HZ_MAX 38000
 #define IR_TX_CARRIER_FREQ_HZ_MIN 30000

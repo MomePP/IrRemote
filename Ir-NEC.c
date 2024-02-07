@@ -1,7 +1,7 @@
 #include "Ir-NEC.h"
 #include "esp_check.h"
 
-static const char *TAG = "nec_encoder";
+static const char *TAG = "nec_codec";
 
 typedef struct
 {
@@ -19,7 +19,7 @@ static size_t rmt_encode_ir_nec(rmt_encoder_t *encoder, rmt_channel_handle_t cha
     rmt_encode_state_t session_state = RMT_ENCODING_RESET;
     rmt_encode_state_t state = RMT_ENCODING_RESET;
     size_t encoded_symbols = 0;
-    ir_nec_scan_code_t *scan_code = (ir_nec_scan_code_t *)primary_data;
+    ir_code_t *scan_code = (ir_code_t *)primary_data;
     rmt_encoder_handle_t copy_encoder = nec_encoder->copy_encoder;
     rmt_encoder_handle_t bytes_encoder = nec_encoder->bytes_encoder;
     switch (nec_encoder->state)
@@ -160,7 +160,34 @@ err:
     return ret;
 }
 
-ir_nec_scan_code_t nec_parse_frame(rmt_symbol_word_t *rmt_nec_symbols)
+/**
+ * @brief Check whether a duration is within expected range
+ */
+static inline bool nec_check_in_range(uint32_t signal_duration, uint32_t spec_duration)
+{
+    return (signal_duration < (spec_duration + IR_NEC_DECODE_MARGIN)) &&
+           (signal_duration > (spec_duration - IR_NEC_DECODE_MARGIN));
+}
+
+/**
+ * @brief Check whether a RMT symbol represents NEC logic zero
+ */
+static bool nec_parse_logic0(rmt_symbol_word_t *rmt_nec_symbols)
+{
+    return nec_check_in_range(rmt_nec_symbols->duration0, NEC_PAYLOAD_ZERO_DURATION_0) &&
+           nec_check_in_range(rmt_nec_symbols->duration1, NEC_PAYLOAD_ZERO_DURATION_1);
+}
+
+/**
+ * @brief Check whether a RMT symbol represents NEC logic one
+ */
+static bool nec_parse_logic1(rmt_symbol_word_t *rmt_nec_symbols)
+{
+    return nec_check_in_range(rmt_nec_symbols->duration0, NEC_PAYLOAD_ONE_DURATION_0) &&
+           nec_check_in_range(rmt_nec_symbols->duration1, NEC_PAYLOAD_ONE_DURATION_1);
+}
+
+static ir_code_t nec_parse_frame(rmt_symbol_word_t *rmt_nec_symbols)
 {
     rmt_symbol_word_t *cur = rmt_nec_symbols;
     uint16_t address = 0;
@@ -169,7 +196,7 @@ ir_nec_scan_code_t nec_parse_frame(rmt_symbol_word_t *rmt_nec_symbols)
                               nec_check_in_range(cur->duration1, NEC_LEADING_CODE_DURATION_1);
     if (!valid_leading_code)
     {
-        return (ir_nec_scan_code_t){0, 0}; // return empty result
+        return (ir_code_t){0, 0}; // return empty result
     }
     cur++;
     for (int i = 0; i < 16; i++)
@@ -184,7 +211,7 @@ ir_nec_scan_code_t nec_parse_frame(rmt_symbol_word_t *rmt_nec_symbols)
         }
         else
         {
-            return (ir_nec_scan_code_t){0, 0}; // return empty result
+            return (ir_code_t){0, 0}; // return empty result
         }
         cur++;
     }
@@ -200,15 +227,48 @@ ir_nec_scan_code_t nec_parse_frame(rmt_symbol_word_t *rmt_nec_symbols)
         }
         else
         {
-            return (ir_nec_scan_code_t){0, 0}; // return empty result
+            return (ir_code_t){0, 0}; // return empty result
         }
         cur++;
     }
-    return (ir_nec_scan_code_t){address, command};
+    return (ir_code_t){address, command};
 }
 
-bool nec_parse_frame_repeat(rmt_symbol_word_t *rmt_nec_symbols)
+static bool nec_parse_frame_repeat(rmt_symbol_word_t *rmt_nec_symbols)
 {
     return nec_check_in_range(rmt_nec_symbols->duration0, NEC_REPEAT_CODE_DURATION_0) &&
            nec_check_in_range(rmt_nec_symbols->duration1, NEC_REPEAT_CODE_DURATION_1);
+}
+
+ir_code_t nec_decode_frame(rmt_symbol_word_t *rmt_nec_symbols, size_t symbol_num)
+{
+    ESP_LOGD(TAG, "NEC frame start---");
+    for (size_t i = 0; i < symbol_num; i++)
+    {
+        ESP_LOGD(TAG, "{%d:%d},{%d:%d}", rmt_nec_symbols[i].level0, rmt_nec_symbols[i].duration0,
+                 rmt_nec_symbols[i].level1, rmt_nec_symbols[i].duration1);
+    }
+    ESP_LOGD(TAG, "---NEC frame end");
+
+    // decode RMT symbols
+    switch (symbol_num)
+    {
+    case 34: // NEC normal frame
+    {
+        s_nec_code = nec_parse_frame(rmt_nec_symbols);
+        ESP_LOGD(TAG, "Address=%04X, Command=%04X\r\n\r\n", s_nec_code.address, s_nec_code.command);
+        break;
+    }
+    case 2: // NEC repeat frame
+        if (nec_parse_frame_repeat(rmt_nec_symbols))
+        {
+            ESP_LOGD(TAG, "Address=%04X, Command=%04X, repeat\r\n\r\n", s_nec_code.address, s_nec_code.command);
+        }
+        break;
+    default:
+        s_nec_code = (ir_code_t){0, 0};
+        ESP_LOGD(TAG, "Unknown NEC frame\r\n\r\n");
+        break;
+    }
+    return s_nec_code;
 }
