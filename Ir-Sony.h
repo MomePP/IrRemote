@@ -30,8 +30,6 @@ extern "C"
 {
 #endif
 
-    static ir_code_t s_sony_code;
-
     /**
      * @brief Build a 13-symbol Sony SIRC frame into an RMT symbol buffer.
      *

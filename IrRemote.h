@@ -18,7 +18,15 @@ public:
     bool getIrCode(uint32_t timeout);
     bool sendIrCode(ir_code_t send_code, uint32_t timeout_ms);
 
-    void setProtocol(ir_remote_protocol irProtocol) { _ir_protocol = irProtocol; }
+    // _ir_protocol is written here (e.g. from the UI/menu task) and read in
+    // getIrCode() from the IR-poll task on a different core. Mark it volatile and
+    // barrier the store so the reader sees the switch on the next poll
+    // (cross-core shared state, per project rules).
+    void setProtocol(ir_remote_protocol irProtocol)
+    {
+        _ir_protocol = irProtocol;
+        __asm__ volatile("memw" ::: "memory");
+    }
     ir_remote_protocol getProtocol(void) { return _ir_protocol; }
 
     uint8_t getIrAddress(void) { return lowByte(_received_code.address); }
@@ -34,6 +42,6 @@ private:
     gpio_num_t _txPin = GPIO_NUM_NC;
     gpio_num_t _rxPin = GPIO_NUM_NC;
 
-    ir_remote_protocol _ir_protocol;
+    volatile ir_remote_protocol _ir_protocol;
     ir_code_t _received_code;
 };

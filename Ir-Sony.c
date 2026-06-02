@@ -3,6 +3,10 @@
 
 static const char *TAG = "sony_codec";
 
+// Holds the most recently decoded Sony scan code. File-scope (not in the header)
+// so each translation unit does not get its own private copy.
+static ir_code_t s_sony_code;
+
 static inline uint16_t sony_ticks(uint64_t us, uint32_t resolution)
 {
     return (uint16_t)(us * resolution / 1000000ULL);

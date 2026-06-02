@@ -79,6 +79,9 @@ bool IrRemoteTx::sendNEC(uint16_t address, uint16_t command)
     return rmt_transmit(_channel, _encoder, &nec_code, sizeof(nec_code), &_transmit_config) == ESP_OK;
 }
 
+// NOTE: blocks the calling task ~135ms — SIRC requires SONY_REPEAT_COUNT (3)
+// frames, each waited to completion then spaced by SONY_FRAME_PERIOD_MS (45ms).
+// Do not call from a latency-sensitive task (e.g. the Logo VM loop).
 bool IrRemoteTx::sendSony(uint16_t address, uint16_t command)
 {
     ESP_LOGD(TAG, "send Sony frame");
