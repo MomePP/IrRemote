@@ -60,6 +60,19 @@ bool IrRemoteRx::receiveNEC(ir_code_t *received_code,TickType_t timeout)
     return received_status;
 }
 
+bool IrRemoteRx::receiveSony(ir_code_t *received_code, TickType_t timeout)
+{
+    rmt_rx_done_event_data_t rx_data;
+    bool received_status = xQueueReceive(_receive_queue, &rx_data, timeout) == pdPASS;
+    if (received_status)
+    {
+        *received_code = sony_decode_frame(rx_data.received_symbols, rx_data.num_symbols);
+        // re-arm using the shared receive window (NEC range covers Sony)
+        ESP_ERROR_CHECK(rmt_receive(_channel, _symbols_buffer, sizeof(_symbols_buffer), &_receive_config));
+    }
+    return received_status;
+}
+
 bool _rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data)
 {
     BaseType_t high_task_wakeup = pdFALSE;
