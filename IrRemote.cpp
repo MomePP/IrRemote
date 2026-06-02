@@ -32,7 +32,7 @@ bool IrRemote::getIrCode(uint32_t timeout_ms)
         retrived_status = remoteRx.receiveNEC(&_received_code, pdMS_TO_TICKS(timeout_ms));
         break;
     case IR_SONY:
-        // TODO: sony protocol might update in future
+        retrived_status = remoteRx.receiveSony(&_received_code, pdMS_TO_TICKS(timeout_ms));
         break;
     };
     return retrived_status;
@@ -47,7 +47,7 @@ bool IrRemote::sendIrCode(ir_code_t send_code, uint32_t timeout_ms)
         sent_status = remoteTx.sendNEC(send_code.address, send_code.command);
         break;
     case IR_SONY:
-        // TODO: sony protocol might update in future
+        sent_status = remoteTx.sendSony(send_code.address, send_code.command);
         break;
     };
     return sent_status;
@@ -55,15 +55,24 @@ bool IrRemote::sendIrCode(ir_code_t send_code, uint32_t timeout_ms)
 
 bool IrRemote::testReadIrCode(uint32_t timeout_ms)
 {
-    return remoteRx.receiveNEC(&_received_code, pdMS_TO_TICKS(timeout_ms));
+    return getIrCode(timeout_ms);
 }
 
 bool IrRemote::testSendIrCode(void)
 {
-    // NEC protocol example data
-    const ir_code_t sent_code = {
-        .address = 0x0440,
-        .command = 0x3003,
-    };
-    return remoteTx.sendNEC(sent_code.address, sent_code.command);
+    switch (_ir_protocol)
+    {
+    case IR_NEC:
+    {
+        const ir_code_t nec_code = {.address = 0x0440, .command = 0x3003};
+        return remoteTx.sendNEC(nec_code.address, nec_code.command);
+    }
+    case IR_SONY:
+    {
+        // Sony SIRC example: address 1 (TV), command 21 (power)
+        const ir_code_t sony_code = {.address = 0x01, .command = 0x15};
+        return remoteTx.sendSony(sony_code.address, sony_code.command);
+    }
+    }
+    return false;
 }

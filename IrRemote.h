@@ -18,6 +18,9 @@ public:
     bool getIrCode(uint32_t timeout);
     bool sendIrCode(ir_code_t send_code, uint32_t timeout_ms);
 
+    void setProtocol(ir_remote_protocol irProtocol) { _ir_protocol = irProtocol; }
+    ir_remote_protocol getProtocol(void) { return _ir_protocol; }
+
     uint8_t getIrAddress(void) { return lowByte(_received_code.address); }
     uint8_t getIrCommand(void) { return lowByte(_received_code.command); }
 
