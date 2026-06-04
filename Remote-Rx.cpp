@@ -11,6 +11,17 @@ IrRemoteRx::IrRemoteRx()
 
 IrRemoteRx::~IrRemoteRx() {}
 
+void IrRemoteRx::_armReceive(void)
+{
+    esp_err_t err = rmt_receive(_channel, _symbols_buffer, sizeof(_symbols_buffer), &_receive_config);
+    // ESP_ERR_INVALID_STATE => a receive is already pending: the channel is still
+    // armed, so this is a harmless no-op. Any other error must NOT abort() the board
+    // (the old ESP_ERROR_CHECK did, causing intermittent resets under IR bursts) —
+    // log the real code and keep running; at worst we drop one frame.
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
+        ESP_LOGW(TAG, "rmt_receive re-arm failed: %s", esp_err_to_name(err));
+}
+
 void IrRemoteRx::begin(gpio_num_t rx_gpio_num, uint32_t resolution_hz)
 {
     ESP_LOGI(TAG, "create RMT RX channel");
@@ -41,7 +52,7 @@ void IrRemoteRx::begin(gpio_num_t rx_gpio_num, uint32_t resolution_hz)
     };
     // save the received RMT symbols
     ESP_LOGI(TAG, "start receive RMT symbols");
-    ESP_ERROR_CHECK(rmt_receive(_channel, _symbols_buffer, sizeof(_symbols_buffer), &_receive_config));
+    _armReceive();
 }
 
 bool IrRemoteRx::receiveNEC(ir_code_t *received_code,TickType_t timeout)
@@ -55,7 +66,7 @@ bool IrRemoteRx::receiveNEC(ir_code_t *received_code,TickType_t timeout)
         // parse the receive symbols and print the result
         *received_code = nec_decode_frame(rx_data.received_symbols, rx_data.num_symbols);
         // start receive again
-        ESP_ERROR_CHECK(rmt_receive(_channel, _symbols_buffer, sizeof(_symbols_buffer), &_receive_config));
+        _armReceive();
     }
     return received_status;
 }
@@ -68,7 +79,7 @@ bool IrRemoteRx::receiveSony(ir_code_t *received_code, TickType_t timeout)
     {
         *received_code = sony_decode_frame(rx_data.received_symbols, rx_data.num_symbols);
         // re-arm using the shared receive window (NEC range covers Sony)
-        ESP_ERROR_CHECK(rmt_receive(_channel, _symbols_buffer, sizeof(_symbols_buffer), &_receive_config));
+        _armReceive();
     }
     return received_status;
 }

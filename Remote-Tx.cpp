@@ -63,7 +63,14 @@ void IrRemoteTx::updateCarrierFrequency(uint32_t frequency)
                                 : (frequency > IR_TX_CARRIER_FREQ_HZ_MAX)
                                     ? IR_TX_CARRIER_FREQ_HZ_MAX
                                     : frequency;
-    ESP_ERROR_CHECK(rmt_apply_carrier(_channel, &_carrier_cfg));
+    // Don't abort() the board on a transient carrier-apply failure — log and bail;
+    // _current_carrier_hz stays unchanged so the next send retries the apply.
+    esp_err_t err = rmt_apply_carrier(_channel, &_carrier_cfg);
+    if (err != ESP_OK)
+    {
+        ESP_LOGW(TAG, "rmt_apply_carrier failed: %s", esp_err_to_name(err));
+        return;
+    }
     _current_carrier_hz = _carrier_cfg.frequency_hz;
 }
 
@@ -99,7 +106,14 @@ bool IrRemoteTx::sendSony(uint16_t address, uint16_t command)
     for (int i = 0; i < SONY_REPEAT_COUNT; i++)
     {
         ok &= rmt_transmit(_channel, _copy_encoder, frame, sizeof(frame), &_transmit_config) == ESP_OK;
-        ESP_ERROR_CHECK(rmt_tx_wait_all_done(_channel, -1)); // ensure frame done before spacing
+        // ensure frame done before spacing; on error log + abort the loop, never abort() the board
+        esp_err_t err = rmt_tx_wait_all_done(_channel, -1);
+        if (err != ESP_OK)
+        {
+            ESP_LOGW(TAG, "rmt_tx_wait_all_done failed: %s", esp_err_to_name(err));
+            ok = false;
+            break;
+        }
         vTaskDelay(pdMS_TO_TICKS(SONY_FRAME_PERIOD_MS));
     }
     return ok;
