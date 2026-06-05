@@ -13,7 +13,7 @@ IrRemote::~IrRemote() {}
 
 void IrRemote::begin(ir_remote_protocol irProtocol, int txPin, int rxPin)
 {
-    _ir_protocol = irProtocol;
+    setProtocol(irProtocol);
     _txPin = (gpio_num_t)txPin;
     _rxPin = (gpio_num_t)rxPin;
 
@@ -25,22 +25,24 @@ void IrRemote::begin(ir_remote_protocol irProtocol, int txPin, int rxPin)
 
 bool IrRemote::getIrCode(uint32_t timeout_ms)
 {
-    bool retrived_status = false;
+    bool retrieved_status = false;
     switch (_ir_protocol)
     {
     case IR_AUTO:
-        retrived_status = remoteRx.receiveAuto(&_received_code, &_detected_protocol, pdMS_TO_TICKS(timeout_ms));
+        retrieved_status = remoteRx.receiveAuto(&_received_code, &_detected_protocol, pdMS_TO_TICKS(timeout_ms));
         break;
     case IR_NEC:
-        retrived_status = remoteRx.receiveNEC(&_received_code, pdMS_TO_TICKS(timeout_ms));
-        _detected_protocol = IR_NEC; // forced mode: detected mirrors configured
+        retrieved_status = remoteRx.receiveNEC(&_received_code, pdMS_TO_TICKS(timeout_ms));
+        if (retrieved_status)
+            _detected_protocol = IR_NEC;
         break;
     case IR_SONY:
-        retrived_status = remoteRx.receiveSony(&_received_code, pdMS_TO_TICKS(timeout_ms));
-        _detected_protocol = IR_SONY;
+        retrieved_status = remoteRx.receiveSony(&_received_code, pdMS_TO_TICKS(timeout_ms));
+        if (retrieved_status)
+            _detected_protocol = IR_SONY;
         break;
     };
-    return retrived_status;
+    return retrieved_status;
 }
 
 bool IrRemote::sendIrCode(ir_code_t send_code, uint32_t timeout_ms)
