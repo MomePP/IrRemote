@@ -28,11 +28,16 @@ bool IrRemote::getIrCode(uint32_t timeout_ms)
     bool retrived_status = false;
     switch (_ir_protocol)
     {
+    case IR_AUTO:
+        retrived_status = remoteRx.receiveAuto(&_received_code, &_detected_protocol, pdMS_TO_TICKS(timeout_ms));
+        break;
     case IR_NEC:
         retrived_status = remoteRx.receiveNEC(&_received_code, pdMS_TO_TICKS(timeout_ms));
+        _detected_protocol = IR_NEC; // forced mode: detected mirrors configured
         break;
     case IR_SONY:
         retrived_status = remoteRx.receiveSony(&_received_code, pdMS_TO_TICKS(timeout_ms));
+        _detected_protocol = IR_SONY;
         break;
     };
     return retrived_status;
@@ -43,6 +48,13 @@ bool IrRemote::sendIrCode(ir_code_t send_code, uint32_t timeout_ms)
     bool sent_status = false;
     switch (_ir_protocol)
     {
+    case IR_AUTO:
+        // TX is bench-only; transmit with the last detected protocol (IR_NEC until
+        // the first frame is received).
+        sent_status = (_detected_protocol == IR_SONY)
+                          ? remoteTx.sendSony(send_code.address, send_code.command)
+                          : remoteTx.sendNEC(send_code.address, send_code.command);
+        break;
     case IR_NEC:
         sent_status = remoteTx.sendNEC(send_code.address, send_code.command);
         break;
@@ -62,6 +74,17 @@ bool IrRemote::testSendIrCode(void)
 {
     switch (_ir_protocol)
     {
+    case IR_AUTO:
+    {
+        // bench helper: mirror sendIrCode's Auto behaviour (detected protocol)
+        if (_detected_protocol == IR_SONY)
+        {
+            const ir_code_t sony_code = {.address = 0x01, .command = 0x15};
+            return remoteTx.sendSony(sony_code.address, sony_code.command);
+        }
+        const ir_code_t nec_code = {.address = 0x0440, .command = 0x3003};
+        return remoteTx.sendNEC(nec_code.address, nec_code.command);
+    }
     case IR_NEC:
     {
         const ir_code_t nec_code = {.address = 0x0440, .command = 0x3003};
