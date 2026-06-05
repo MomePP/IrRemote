@@ -4,8 +4,9 @@
 
 enum ir_remote_protocol
 {
-    IR_NEC = 0,
-    IR_SONY,
+    IR_AUTO = 0, // auto-detect by RMT symbol count (default)
+    IR_NEC,      // 1
+    IR_SONY,     // 2
 };
 
 typedef struct
