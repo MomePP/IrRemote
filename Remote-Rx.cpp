@@ -84,6 +84,36 @@ bool IrRemoteRx::receiveSony(ir_code_t *received_code, TickType_t timeout)
     return received_status;
 }
 
+bool IrRemoteRx::receiveAuto(ir_code_t *received_code, ir_remote_protocol *detected, TickType_t timeout)
+{
+    rmt_rx_done_event_data_t rx_data;
+    bool received_status = xQueueReceive(_receive_queue, &rx_data, timeout) == pdPASS;
+    if (received_status)
+    {
+        // Symbol-count dispatch over the shared receive window. Counts never collide:
+        // Sony 12-bit = 13, NEC frame = 34, NEC repeat = 2.
+        size_t symbol_num = rx_data.num_symbols;
+        if (symbol_num == IR_SONY_RX_SYMBOL_COUNT)
+        {
+            *received_code = sony_decode_frame(rx_data.received_symbols, symbol_num);
+            *detected = IR_SONY;
+        }
+        else if (symbol_num == IR_NEC_RX_FRAME_SYMBOL_COUNT ||
+                 symbol_num == IR_NEC_RX_REPEAT_SYMBOL_COUNT)
+        {
+            *received_code = nec_decode_frame(rx_data.received_symbols, symbol_num);
+            *detected = IR_NEC;
+        }
+        else
+        {
+            *received_code = (ir_code_t){0, 0}; // unknown frame; leave *detected as-is
+        }
+        // re-arm using the shared receive window (NEC range covers Sony)
+        _armReceive();
+    }
+    return received_status;
+}
+
 bool _rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data)
 {
     BaseType_t high_task_wakeup = pdFALSE;

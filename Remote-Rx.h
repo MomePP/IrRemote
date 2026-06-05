@@ -23,6 +23,11 @@ public:
     bool receiveNEC(ir_code_t *received_code, TickType_t timeout);
     bool receiveSony(ir_code_t *received_code, TickType_t timeout);
 
+    // Auto-detect: dequeue one frame from the shared window and dispatch by RMT
+    // symbol count. Writes *detected (IR_NEC / IR_SONY) for the frame's actual
+    // protocol; leaves *detected unchanged on an unrecognised symbol count.
+    bool receiveAuto(ir_code_t *received_code, ir_remote_protocol *detected, TickType_t timeout);
+
 private:
     // (Re-)arm the RX channel. Never abort()s on a transient RMT error — a
     // peripheral hiccup must not reset the whole board; it logs and carries on.
