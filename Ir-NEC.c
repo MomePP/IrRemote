@@ -253,13 +253,13 @@ ir_code_t nec_decode_frame(rmt_symbol_word_t *rmt_nec_symbols, size_t symbol_num
     // decode RMT symbols
     switch (symbol_num)
     {
-    case 34: // NEC normal frame
+    case IR_NEC_RX_FRAME_SYMBOL_COUNT: // NEC normal frame
     {
         s_nec_code = nec_parse_frame(rmt_nec_symbols);
         ESP_LOGD(TAG, "Address=%04X, Command=%04X\r\n\r\n", s_nec_code.address, s_nec_code.command);
         break;
     }
-    case 2: // NEC repeat frame
+    case IR_NEC_RX_REPEAT_SYMBOL_COUNT: // NEC repeat frame
         if (nec_parse_frame_repeat(rmt_nec_symbols))
         {
             ESP_LOGD(TAG, "Address=%04X, Command=%04X, repeat\r\n\r\n", s_nec_code.address, s_nec_code.command);

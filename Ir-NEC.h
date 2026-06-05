@@ -20,6 +20,13 @@
 #define IR_NEC_SIGNAL_RANGE_MIN     1250     // the shortest duration for NEC signal is 560us, 1250ns < 560us, valid signal won't be treated as noise
 #define IR_NEC_SIGNAL_RANGE_MAX     12000000 // the longest duration for NEC signal is 9000us, 12000000ns > 9000us, the receive won't stop early
 
+// RMT symbol counts that identify an NEC frame on RX (used by the decoder's
+// dispatch and by the auto-detect router in Remote-Rx). A full frame is the
+// 9ms leading symbol + 16 address bits + 16 command bits + 1 ending symbol = 34;
+// an auto-repeat is the leading symbol + the 2.25ms repeat code = 2.
+#define IR_NEC_RX_FRAME_SYMBOL_COUNT  34
+#define IR_NEC_RX_REPEAT_SYMBOL_COUNT 2
+
 #ifdef __cplusplus
 extern "C"
 {
