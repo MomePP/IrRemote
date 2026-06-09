@@ -37,6 +37,12 @@ public:
     void transmitRange(uint16_t cm) { remoteTx.transmitRange(cm); }
     void clearTransmitRange(void)   { remoteTx.clearTransmitRange(); }
 
+    bool sendData(const uint8_t *bytes, uint8_t len) { return remoteTx.sendData(bytes, len); }
+    bool receiveData(uint8_t *out, uint8_t *out_len, uint32_t timeout_ms)
+    {
+        return remoteRx.receiveData(out, out_len, pdMS_TO_TICKS(timeout_ms));
+    }
+
     uint8_t getIrAddress(void) { return lowByte(_received_code.address); }
     uint8_t getIrCommand(void) { return lowByte(_received_code.command); }
 

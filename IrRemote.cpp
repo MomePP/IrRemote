@@ -41,6 +41,8 @@ bool IrRemote::getIrCode(uint32_t timeout_ms)
         if (retrieved_status)
             _detected_protocol = IR_SONY;
         break;
+    case IR_DATA:
+        break; // data mode uses receiveData(), not the ir_code_t path
     };
     return retrieved_status;
 }
@@ -63,6 +65,8 @@ bool IrRemote::sendIrCode(ir_code_t send_code, uint32_t timeout_ms)
     case IR_SONY:
         sent_status = remoteTx.sendSony(send_code.address, send_code.command);
         break;
+    case IR_DATA:
+        break; // data mode uses sendData(), not the ir_code_t path
     };
     return sent_status;
 }
@@ -98,6 +102,8 @@ bool IrRemote::testSendIrCode(void)
         const ir_code_t sony_code = {.address = 0x01, .command = 0x15};
         return remoteTx.sendSony(sony_code.address, sony_code.command);
     }
+    case IR_DATA:
+        break; // no remote-code test frame for data mode
     }
     return false;
 }
