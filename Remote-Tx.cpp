@@ -165,7 +165,7 @@ bool IrRemoteTx::sendData(const uint8_t *bytes, uint8_t len)
     if (len > IR_DATA_MAX_PAYLOAD)
         return false;
 
-    uint32_t target = _range_carrier_hz ? _range_carrier_hz : IR_TX_CARRIER_FREQ_HZ_NEC;
+    uint32_t target = _range_carrier_hz ? _range_carrier_hz : IR_TX_CARRIER_FREQ_HZ_DATA;
     if (_current_carrier_hz != target)
         updateCarrierFrequency(target);
 

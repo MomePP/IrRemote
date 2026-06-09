@@ -8,6 +8,7 @@
 
 #define IR_TX_CARRIER_FREQ_HZ_NEC  38000
 #define IR_TX_CARRIER_FREQ_HZ_SONY 40000
+#define IR_TX_CARRIER_FREQ_HZ_DATA 38000 // data mode shares NEC's 38 kHz (RX band-pass centre)
 #define IR_TX_CARRIER_FREQ_HZ_MAX  40000 // raised from 38000 so Sony's 40kHz is not clamped
 #define IR_TX_CARRIER_FREQ_HZ_MIN  30000
 #define IR_TX_CARRIER_DUTY         0.33
@@ -78,6 +79,6 @@ private:
     uint32_t rangeToCarrierHz(uint16_t cm); // clamp + linear interp over IR_RANGE_CALIBRATION
 
     // Scratch buffer for the outgoing data frame (built then pushed via _copy_encoder).
-    // Member (not stack) to avoid ~1.1 KB of stack pressure on the Logo VM task.
+    // Member (not stack) to avoid ~584 bytes of stack pressure on the Logo VM task.
     rmt_symbol_word_t _data_frame[IR_DATA_MAX_FRAME_SYMBOLS];
 };

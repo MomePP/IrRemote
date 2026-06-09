@@ -18,6 +18,7 @@
 #define IR_DATA_LEADER_MARK   4500ULL  // PROVISIONAL sync / AGC-settle (distinct from NEC 9000)
 #define IR_DATA_LEADER_SPACE  4500ULL  // PROVISIONAL
 #define IR_DATA_STOP_MARK     560ULL   // trailing mark; end-of-frame is the idle gap
+#define IR_DATA_STOP_IDLE_TICKS 0x7FFF // RMT max 15-bit duration — signals end-of-frame idle
 
 #define IR_DATA_DECODE_MARGIN 250      // RMT duration tolerance (us)
 #define IR_DATA_MAX_PAYLOAD   16       // PROVISIONAL, AGC-bounded; bench-tune

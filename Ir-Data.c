@@ -20,6 +20,16 @@ uint8_t data_crc8(const uint8_t *data, size_t len)
     return crc;
 }
 
+// CRC-8 over the wire-format prefix [LEN, payload...] — the bytes the frame protects.
+static uint8_t data_frame_crc(uint8_t len, const uint8_t *payload)
+{
+    uint8_t buf[1 + IR_DATA_MAX_PAYLOAD];
+    buf[0] = len;
+    for (uint8_t i = 0; i < len; i++)
+        buf[1 + i] = payload[i];
+    return data_crc8(buf, (size_t)(1 + len));
+}
+
 // Emit one byte as 8 pulse-distance bit-symbols (LSB-first) into out[idx..]; returns new idx.
 static size_t data_emit_byte(rmt_symbol_word_t *out, size_t idx, uint8_t value, uint32_t resolution)
 {
@@ -41,12 +51,7 @@ size_t data_build_frame(rmt_symbol_word_t *out, const uint8_t *payload, uint8_t 
     if (len > IR_DATA_MAX_PAYLOAD)
         return 0;
 
-    // CRC over [LEN, payload...]
-    uint8_t crc_buf[1 + IR_DATA_MAX_PAYLOAD];
-    crc_buf[0] = len;
-    for (uint8_t i = 0; i < len; i++)
-        crc_buf[1 + i] = payload[i];
-    uint8_t crc = data_crc8(crc_buf, (size_t)(1 + len));
+    uint8_t crc = data_frame_crc(len, payload);
 
     size_t idx = 0;
     // leader
@@ -64,7 +69,7 @@ size_t data_build_frame(rmt_symbol_word_t *out, const uint8_t *payload, uint8_t 
     out[idx++] = (rmt_symbol_word_t){
         .duration0 = data_ticks(IR_DATA_STOP_MARK, resolution),
         .level0    = 1,
-        .duration1 = 0x7FFF,
+        .duration1 = IR_DATA_STOP_IDLE_TICKS,
         .level1    = 0,
     };
     return idx;
@@ -121,11 +126,7 @@ int data_decode_frame(const rmt_symbol_word_t *symbols, size_t symbol_num, uint8
     if (!ok)
         return -1;
 
-    uint8_t crc_buf[1 + IR_DATA_MAX_PAYLOAD];
-    crc_buf[0] = len;
-    for (uint8_t i = 0; i < len; i++)
-        crc_buf[1 + i] = out[i];
-    if (data_crc8(crc_buf, (size_t)(1 + len)) != rx_crc)
+    if (data_frame_crc(len, out) != rx_crc)
     {
         ESP_LOGD(TAG, "data frame CRC mismatch");
         return -1;
