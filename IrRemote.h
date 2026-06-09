@@ -34,6 +34,9 @@ public:
     // is needed (unlike _ir_protocol, which the menu task also writes).
     ir_remote_protocol getDetectedProtocol(void) { return _detected_protocol; }
 
+    void transmitRange(uint16_t cm) { remoteTx.transmitRange(cm); }
+    void clearTransmitRange(void)   { remoteTx.clearTransmitRange(); }
+
     uint8_t getIrAddress(void) { return lowByte(_received_code.address); }
     uint8_t getIrCommand(void) { return lowByte(_received_code.command); }
 
