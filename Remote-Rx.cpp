@@ -114,6 +114,22 @@ bool IrRemoteRx::receiveAuto(ir_code_t *received_code, ir_remote_protocol *detec
     return received_status;
 }
 
+bool IrRemoteRx::receiveData(uint8_t *out, uint8_t *out_len, TickType_t timeout)
+{
+    rmt_rx_done_event_data_t rx_data;
+    bool received_status = xQueueReceive(_receive_queue, &rx_data, timeout) == pdPASS;
+    if (received_status)
+    {
+        int len = data_decode_frame(rx_data.received_symbols, rx_data.num_symbols, out);
+        _armReceive();
+        if (len < 0)
+            return false; // garbled / CRC mismatch — a frame arrived but is unusable
+        *out_len = (uint8_t)len;
+        return true;
+    }
+    return false;
+}
+
 bool _rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data)
 {
     BaseType_t high_task_wakeup = pdFALSE;
