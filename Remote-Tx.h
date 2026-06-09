@@ -18,7 +18,7 @@
 // PROVISIONAL range->carrier calibration — REFINE FROM BENCH LOGS.
 // Workflow: call `transmit_range <cm>`, read the logged carrier Hz on serial,
 // measure the actual max distance, then edit these points so each cm maps to the
-// measured distance. Points MUST be sorted ascending by cm. Linearly interpolated.
+// measured distance. Points MUST be sorted STRICTLY ascending by cm (no duplicate cm — rangeToCarrierHz divides by the cm span). Linearly interpolated.
 struct ir_range_cal_point_t
 {
     uint16_t cm;
@@ -30,6 +30,7 @@ static constexpr ir_range_cal_point_t IR_RANGE_CALIBRATION[] = {
 };
 static constexpr size_t IR_RANGE_CAL_COUNT =
     sizeof(IR_RANGE_CALIBRATION) / sizeof(IR_RANGE_CALIBRATION[0]);
+static_assert(IR_RANGE_CAL_COUNT >= 2, "IR_RANGE_CALIBRATION needs at least 2 points to interpolate");
 
 class IrRemoteTx
 {
@@ -58,10 +59,11 @@ private:
     rmt_encoder_handle_t _copy_encoder;  // used to push pre-built Sony frames
     uint32_t _resolution;                // RMT tick resolution, for Sony frame building
     uint32_t _current_carrier_hz;        // cache to avoid redundant rmt_apply_carrier
-    uint32_t rangeToCarrierHz(uint16_t cm); // clamp + linear interp over IR_RANGE_CALIBRATION
 
     // Active range carrier override; 0 = inactive (sends use the per-protocol carrier).
     // Written by transmitRange() and read by sendNEC/sendSony, all from the Logo VM
     // task only, so non-volatile / no barrier (same reasoning as _detected_protocol).
     uint32_t _range_carrier_hz = 0;
+
+    uint32_t rangeToCarrierHz(uint16_t cm); // clamp + linear interp over IR_RANGE_CALIBRATION
 };
