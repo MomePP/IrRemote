@@ -11,6 +11,26 @@
 #define IR_TX_CARRIER_FREQ_HZ_MIN  30000
 #define IR_TX_CARRIER_DUTY         0.33
 
+// IRM-H638J7 RX is tuned to 38 kHz: TX range peaks when the carrier matches it and
+// shrinks as the carrier detunes down toward IR_TX_CARRIER_FREQ_HZ_MIN (30 kHz).
+#define IR_TX_RANGE_CARRIER_HZ_MAX 38000 // == RX band-pass centre = maximum range
+
+// PROVISIONAL range->carrier calibration — REFINE FROM BENCH LOGS.
+// Workflow: call `transmit_range <cm>`, read the logged carrier Hz on serial,
+// measure the actual max distance, then edit these points so each cm maps to the
+// measured distance. Points MUST be sorted ascending by cm. Linearly interpolated.
+struct ir_range_cal_point_t
+{
+    uint16_t cm;
+    uint32_t hz;
+};
+static constexpr ir_range_cal_point_t IR_RANGE_CALIBRATION[] = {
+    {10,  IR_TX_CARRIER_FREQ_HZ_MIN},   // PROVISIONAL near end (most detuned)
+    {200, IR_TX_RANGE_CARRIER_HZ_MAX},  // PROVISIONAL far end  (on-tune, max range)
+};
+static constexpr size_t IR_RANGE_CAL_COUNT =
+    sizeof(IR_RANGE_CALIBRATION) / sizeof(IR_RANGE_CALIBRATION[0]);
+
 class IrRemoteTx
 {
 public:
@@ -23,6 +43,13 @@ public:
     bool sendNEC(uint16_t address, uint16_t command);
     bool sendSony(uint16_t address, uint16_t command);
 
+    // Set IR TX usable range: maps cm -> carrier Hz via IR_RANGE_CALIBRATION (clamped
+    // to the table's cm endpoints), activates a carrier override that sendNEC/sendSony
+    // honor, applies it, and logs cm -> Hz. clearTransmitRange() reverts to the
+    // per-protocol carrier (maximum range).
+    void transmitRange(uint16_t cm);
+    void clearTransmitRange(void);
+
 private:
     rmt_channel_handle_t _channel;
     rmt_carrier_config_t _carrier_cfg;
@@ -31,4 +58,10 @@ private:
     rmt_encoder_handle_t _copy_encoder;  // used to push pre-built Sony frames
     uint32_t _resolution;                // RMT tick resolution, for Sony frame building
     uint32_t _current_carrier_hz;        // cache to avoid redundant rmt_apply_carrier
+    uint32_t rangeToCarrierHz(uint16_t cm); // clamp + linear interp over IR_RANGE_CALIBRATION
+
+    // Active range carrier override; 0 = inactive (sends use the per-protocol carrier).
+    // Written by transmitRange() and read by sendNEC/sendSony, all from the Logo VM
+    // task only, so non-volatile / no barrier (same reasoning as _detected_protocol).
+    uint32_t _range_carrier_hz = 0;
 };
