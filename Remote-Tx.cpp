@@ -123,7 +123,8 @@ bool IrRemoteTx::sendSony(uint16_t address, uint16_t command)
 
 uint32_t IrRemoteTx::rangeToCarrierHz(uint16_t cm)
 {
-    // Sorted ascending by cm; clamp to the table endpoints.
+    // Sorted ascending by cm; clamp to the table endpoints. Out-of-range or wrapped cm
+    // (e.g. a negative Logo value cast to uint16_t -> ~65535) clamps to max range.
     if (cm <= IR_RANGE_CALIBRATION[0].cm)
         return IR_RANGE_CALIBRATION[0].hz;
     if (cm >= IR_RANGE_CALIBRATION[IR_RANGE_CAL_COUNT - 1].cm)
@@ -153,6 +154,6 @@ void IrRemoteTx::transmitRange(uint16_t cm)
 
 void IrRemoteTx::clearTransmitRange(void)
 {
-    _range_carrier_hz = 0; // next send re-applies the per-protocol carrier
+    _range_carrier_hz = 0; // lazy: the RMT carrier reverts on the NEXT send, not now
     ESP_LOGI(TAG, "clearTransmitRange: revert to per-protocol carrier");
 }

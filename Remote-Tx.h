@@ -61,8 +61,11 @@ private:
     uint32_t _current_carrier_hz;        // cache to avoid redundant rmt_apply_carrier
 
     // Active range carrier override; 0 = inactive (sends use the per-protocol carrier).
-    // Written by transmitRange() and read by sendNEC/sendSony, all from the Logo VM
-    // task only, so non-volatile / no barrier (same reasoning as _detected_protocol).
+    // Written by transmitRange() and read by sendNEC/sendSony, reached only from the
+    // Logo VM tasks (logoVMTask AND bgLogoVMTask) — both on Core 1, so this aligned
+    // 32-bit word needs no volatile/barrier (no torn reads under same-core preemption).
+    // NOTE: concurrent IR TX from both VMs simultaneously is unguarded (no mutex),
+    // consistent with the existing IR opcode handling; that is pathological usage.
     uint32_t _range_carrier_hz = 0;
 
     uint32_t rangeToCarrierHz(uint16_t cm); // clamp + linear interp over IR_RANGE_CALIBRATION
