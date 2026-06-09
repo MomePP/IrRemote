@@ -76,8 +76,9 @@ void IrRemoteTx::updateCarrierFrequency(uint32_t frequency)
 
 bool IrRemoteTx::sendNEC(uint16_t address, uint16_t command)
 {
-    if (_current_carrier_hz != IR_TX_CARRIER_FREQ_HZ_NEC)
-        updateCarrierFrequency(IR_TX_CARRIER_FREQ_HZ_NEC);
+    uint32_t target = _range_carrier_hz ? _range_carrier_hz : IR_TX_CARRIER_FREQ_HZ_NEC;
+    if (_current_carrier_hz != target)
+        updateCarrierFrequency(target);
     ESP_LOGD(TAG, "send NEC frame");
     ir_code_t nec_code = {
         .address = address,
@@ -92,8 +93,9 @@ bool IrRemoteTx::sendNEC(uint16_t address, uint16_t command)
 bool IrRemoteTx::sendSony(uint16_t address, uint16_t command)
 {
     ESP_LOGD(TAG, "send Sony frame");
-    if (_current_carrier_hz != IR_TX_CARRIER_FREQ_HZ_SONY)
-        updateCarrierFrequency(IR_TX_CARRIER_FREQ_HZ_SONY);
+    uint32_t target = _range_carrier_hz ? _range_carrier_hz : IR_TX_CARRIER_FREQ_HZ_SONY;
+    if (_current_carrier_hz != target)
+        updateCarrierFrequency(target);
 
     ir_code_t sony_code = {
         .address = address,
@@ -117,4 +119,40 @@ bool IrRemoteTx::sendSony(uint16_t address, uint16_t command)
         vTaskDelay(pdMS_TO_TICKS(SONY_FRAME_PERIOD_MS));
     }
     return ok;
+}
+
+uint32_t IrRemoteTx::rangeToCarrierHz(uint16_t cm)
+{
+    // Sorted ascending by cm; clamp to the table endpoints.
+    if (cm <= IR_RANGE_CALIBRATION[0].cm)
+        return IR_RANGE_CALIBRATION[0].hz;
+    if (cm >= IR_RANGE_CALIBRATION[IR_RANGE_CAL_COUNT - 1].cm)
+        return IR_RANGE_CALIBRATION[IR_RANGE_CAL_COUNT - 1].hz;
+
+    // Find the bracketing pair and linearly interpolate Hz across [lo.cm, hi.cm].
+    for (size_t i = 1; i < IR_RANGE_CAL_COUNT; i++)
+    {
+        if (cm <= IR_RANGE_CALIBRATION[i].cm)
+        {
+            const ir_range_cal_point_t lo = IR_RANGE_CALIBRATION[i - 1];
+            const ir_range_cal_point_t hi = IR_RANGE_CALIBRATION[i];
+            int32_t span_cm = (int32_t)hi.cm - (int32_t)lo.cm;
+            int32_t span_hz = (int32_t)hi.hz - (int32_t)lo.hz;
+            return (uint32_t)((int32_t)lo.hz + span_hz * ((int32_t)cm - (int32_t)lo.cm) / span_cm);
+        }
+    }
+    return IR_RANGE_CALIBRATION[IR_RANGE_CAL_COUNT - 1].hz; // unreachable
+}
+
+void IrRemoteTx::transmitRange(uint16_t cm)
+{
+    _range_carrier_hz = rangeToCarrierHz(cm);
+    updateCarrierFrequency(_range_carrier_hz); // existing clamp + apply + cache
+    ESP_LOGI(TAG, "transmitRange: %u cm -> carrier %u Hz", cm, _range_carrier_hz);
+}
+
+void IrRemoteTx::clearTransmitRange(void)
+{
+    _range_carrier_hz = 0; // next send re-applies the per-protocol carrier
+    ESP_LOGI(TAG, "clearTransmitRange: revert to per-protocol carrier");
 }
