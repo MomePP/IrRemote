@@ -90,8 +90,10 @@ bool IrRemoteRx::receiveAuto(ir_code_t *received_code, ir_remote_protocol *detec
     bool received_status = xQueueReceive(_receive_queue, &rx_data, timeout) == pdPASS;
     if (received_status)
     {
-        // Symbol-count dispatch over the shared receive window. Counts never collide:
-        // Sony 12-bit = 13, NEC frame = 34, NEC repeat = 2.
+        // Symbol-count dispatch for the remote-control protocols. Counts never collide
+        // AMONG NEC/Sony: Sony 12-bit = 13, NEC frame = 34, NEC repeat = 2. (IR_DATA
+        // frames are NOT dispatched here — they use receiveData(); note a 2-byte data
+        // frame is also 34 symbols, so the modes are intentionally exclusive.)
         size_t symbol_num = rx_data.num_symbols;
         if (symbol_num == IR_SONY_RX_SYMBOL_COUNT)
         {
