@@ -4,6 +4,7 @@
 
 #include "Ir-NEC.h"
 #include "Ir-Sony.h"
+#include "Ir-Data.h"
 
 #define IR_TX_CARRIER_FREQ_HZ_NEC  38000
 #define IR_TX_CARRIER_FREQ_HZ_SONY 40000
@@ -44,6 +45,12 @@ public:
     bool sendNEC(uint16_t address, uint16_t command);
     bool sendSony(uint16_t address, uint16_t command);
 
+    // Send one IR data frame (pulse-distance, CRC-8). len <= IR_DATA_MAX_PAYLOAD.
+    // Synchronous: blocks the caller until the frame is fully transmitted
+    // (~frame duration, hundreds of ms at the data bit rate). Returns false if
+    // len is too large or the RMT transmit/wait fails.
+    bool sendData(const uint8_t *bytes, uint8_t len);
+
     // Set IR TX usable range: maps cm -> carrier Hz via IR_RANGE_CALIBRATION (clamped
     // to the table's cm endpoints), activates a carrier override that sendNEC/sendSony
     // honor, applies it, and logs cm -> Hz. clearTransmitRange() reverts to the
@@ -69,4 +76,8 @@ private:
     uint32_t _range_carrier_hz = 0;
 
     uint32_t rangeToCarrierHz(uint16_t cm); // clamp + linear interp over IR_RANGE_CALIBRATION
+
+    // Scratch buffer for the outgoing data frame (built then pushed via _copy_encoder).
+    // Member (not stack) to avoid ~1.1 KB of stack pressure on the Logo VM task.
+    rmt_symbol_word_t _data_frame[IR_DATA_MAX_FRAME_SYMBOLS];
 };

@@ -157,3 +157,30 @@ void IrRemoteTx::clearTransmitRange(void)
     _range_carrier_hz = 0; // lazy: the RMT carrier reverts on the NEXT send, not now
     ESP_LOGI(TAG, "clearTransmitRange: revert to per-protocol carrier");
 }
+
+// NOTE: blocks the caller until the whole frame is sent (~frame duration). Data uses
+// the 38 kHz carrier; honors the range-carrier override exactly like sendNEC.
+bool IrRemoteTx::sendData(const uint8_t *bytes, uint8_t len)
+{
+    if (len > IR_DATA_MAX_PAYLOAD)
+        return false;
+
+    uint32_t target = _range_carrier_hz ? _range_carrier_hz : IR_TX_CARRIER_FREQ_HZ_NEC;
+    if (_current_carrier_hz != target)
+        updateCarrierFrequency(target);
+
+    size_t symbols = data_build_frame(_data_frame, bytes, len, _resolution);
+    if (symbols == 0)
+        return false;
+
+    ESP_LOGD(TAG, "send data frame: len=%u, symbols=%u", (unsigned)len, (unsigned)symbols);
+    if (rmt_transmit(_channel, _copy_encoder, _data_frame, symbols * sizeof(rmt_symbol_word_t), &_transmit_config) != ESP_OK)
+        return false;
+    esp_err_t err = rmt_tx_wait_all_done(_channel, -1);
+    if (err != ESP_OK)
+    {
+        ESP_LOGW(TAG, "data rmt_tx_wait_all_done failed: %s", esp_err_to_name(err));
+        return false;
+    }
+    return true;
+}
