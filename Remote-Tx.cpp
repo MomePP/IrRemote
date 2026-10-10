@@ -7,6 +7,7 @@ IrRemoteTx::IrRemoteTx()
 {
     _channel = NULL;
     _encoder = NULL;
+    _next_payload = 0;
 }
 
 IrRemoteTx::~IrRemoteTx()
@@ -21,7 +22,7 @@ void IrRemoteTx::begin(gpio_num_t tx_gpio_num, uint32_t resolution_hz)
         .clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = resolution_hz,
         .mem_block_symbols = 64, // amount of RMT symbols that the channel can store at a time
-        .trans_queue_depth = 4,  // number of transactions that allowed to pending in the background, this example won't queue multiple transactions, so queue depth > 1 is sufficient
+        .trans_queue_depth = IR_TX_QUEUE_DEPTH, // number of transactions that allowed to pending in the background, this example won't queue multiple transactions, so queue depth > 1 is sufficient
     };
     ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_channel_cfg, &_channel));
 
@@ -60,9 +61,9 @@ void IrRemoteTx::updateCarrierFrequency(uint32_t frequency)
 bool IrRemoteTx::sendNEC(uint16_t address, uint16_t command)
 {
     ESP_LOGD(TAG, "send NEC frame");
-    ir_code_t nec_code = {
-        .address = address,
-        .command = command,
-    };
-    return rmt_transmit(_channel, _encoder, &nec_code, sizeof(nec_code), &_transmit_config) == ESP_OK;
+    ir_code_t *nec_code = &_payloads[_next_payload];
+    nec_code->address = address;
+    nec_code->command = command;
+    _next_payload = (_next_payload + 1) % IR_TX_PAYLOAD_SLOTS;
+    return rmt_transmit(_channel, _encoder, nec_code, sizeof(*nec_code), &_transmit_config) == ESP_OK;
 }
