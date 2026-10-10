@@ -7,7 +7,7 @@
 
 #include "IrProtocol.h"
 
-class IrRemote : public IrRemoteTx, public IrRemoteRx
+class IrRemote
 {
 public:
     IrRemote(void);

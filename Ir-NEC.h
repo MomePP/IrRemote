@@ -25,8 +25,6 @@ extern "C"
 {
 #endif
 
-    static ir_code_t s_nec_code;
-
     /**
      * @brief Type of IR NEC encoder configuration
      */

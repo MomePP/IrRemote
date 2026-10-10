@@ -3,6 +3,9 @@
 
 static const char *TAG = "nec_codec";
 
+// last decoded code, replayed on a repeat frame
+static ir_code_t s_nec_code;
+
 typedef struct
 {
     rmt_encoder_t base;                   // the base "class", declares the standard encoder interface
