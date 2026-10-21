@@ -9,12 +9,13 @@
 #include "Ir-Sony.h"
 #include "Ir-Data.h"
 
-// Holds the largest expected RX frame. An IR_DATA max frame is
-// IR_DATA_MAX_FRAME_SYMBOLS (146) symbols, so 128 is too small; 192 gives headroom.
-// The RX channel mem_block (64) is unchanged — the driver ping-pongs into this buffer.
+// Capacity of one RX frame buffer, in RMT symbols. It must hold the longest IR_DATA frame
+// (IR_DATA_MAX_FRAME_SYMBOLS, 146 symbols); 192 gives headroom. The NEC (34 symbols), Sony (13)
+// and repeat frames are all shorter. The RX channel mem_block (64) is unchanged: the driver
+// ping-pongs into this buffer and truncates a longer burst to its size (no overrun).
 #define IR_RX_SYMBOL_BUF_SIZE 192
-
-static bool _rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data);
+// The ISR re-arms the channel into the buffer the consumer does not own, so two are needed.
+#define IR_RX_BUFFER_COUNT 2
 
 class IrRemoteRx
 {
@@ -38,12 +39,14 @@ public:
     bool receiveData(uint8_t *out, uint8_t *out_len, TickType_t timeout);
 
 private:
-    // (Re-)arm the RX channel. Never abort()s on a transient RMT error — a
-    // peripheral hiccup must not reset the whole board; it logs and carries on.
-    void _armReceive(void);
+    static bool _rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data);
+    void _onReceiveDone(const rmt_rx_done_event_data_t *edata, BaseType_t *high_task_wakeup);
+    void _releaseBuffer(const rmt_symbol_word_t *symbols);
 
     QueueHandle_t _receive_queue;
     rmt_channel_handle_t _channel;
-    rmt_symbol_word_t _symbols_buffer[IR_RX_SYMBOL_BUF_SIZE];
+    rmt_symbol_word_t _symbols_buffer[IR_RX_BUFFER_COUNT][IR_RX_SYMBOL_BUF_SIZE];
     rmt_receive_config_t _receive_config;
+    uint8_t _fill_index;                     // buffer the channel is filling; ISR only
+    volatile bool _held[IR_RX_BUFFER_COUNT]; // handed to the consumer, not yet released
 };

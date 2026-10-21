@@ -12,6 +12,12 @@
 #define IR_TX_CARRIER_FREQ_HZ_MAX  40000 // raised from 38000 so Sony's 40kHz is not clamped
 #define IR_TX_CARRIER_FREQ_HZ_MIN  30000
 #define IR_TX_CARRIER_DUTY         0.33
+#define IR_TX_QUEUE_DEPTH         4 // transactions allowed to be pending in the driver
+// rmt_transmit() keeps only a pointer to the payload and the encoder reads it later (from the
+// ISR once the frame is queued behind another), so every queued frame needs its own slot.
+// One more than the queue depth: a slot is rewritten before rmt_transmit() blocks for a
+// free transaction, at which point the oldest frame's slot may still be in flight.
+#define IR_TX_PAYLOAD_SLOTS       (IR_TX_QUEUE_DEPTH + 1)
 
 // IRM-H638J7 RX is tuned to 38 kHz: TX range peaks when the carrier matches it and
 // shrinks as the carrier detunes down toward IR_TX_CARRIER_FREQ_HZ_MIN (30 kHz).
@@ -64,6 +70,8 @@ private:
     rmt_carrier_config_t _carrier_cfg;
     rmt_transmit_config_t _transmit_config;
     rmt_encoder_handle_t _encoder;       // NEC custom encoder
+    ir_code_t _payloads[IR_TX_PAYLOAD_SLOTS]; // NEC payload slots (rmt_transmit keeps only a pointer)
+    uint8_t _next_payload;
     rmt_encoder_handle_t _copy_encoder;  // used to push pre-built Sony frames
     uint32_t _resolution;                // RMT tick resolution, for Sony frame building
     uint32_t _current_carrier_hz;        // cache to avoid redundant rmt_apply_carrier

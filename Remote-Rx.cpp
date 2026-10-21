@@ -7,20 +7,12 @@ IrRemoteRx::IrRemoteRx()
 {
     _receive_queue = NULL;
     _channel = NULL;
+    _fill_index = 0;
+    for (volatile bool &held : _held)
+        held = false;
 }
 
 IrRemoteRx::~IrRemoteRx() {}
-
-void IrRemoteRx::_armReceive(void)
-{
-    esp_err_t err = rmt_receive(_channel, _symbols_buffer, sizeof(_symbols_buffer), &_receive_config);
-    // ESP_ERR_INVALID_STATE => a receive is already pending: the channel is still
-    // armed, so this is a harmless no-op. Any other error must NOT abort() the board
-    // (the old ESP_ERROR_CHECK did, causing intermittent resets under IR bursts) —
-    // log the real code and keep running; at worst we drop one frame.
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
-        ESP_LOGW(TAG, "rmt_receive re-arm failed: %s", esp_err_to_name(err));
-}
 
 void IrRemoteRx::begin(gpio_num_t rx_gpio_num, uint32_t resolution_hz)
 {
@@ -40,7 +32,7 @@ void IrRemoteRx::begin(gpio_num_t rx_gpio_num, uint32_t resolution_hz)
     rmt_rx_event_callbacks_t cbs = {
         .on_recv_done = _rmt_rx_done_callback,
     };
-    ESP_ERROR_CHECK(rmt_rx_register_event_callbacks(_channel, &cbs, _receive_queue));
+    ESP_ERROR_CHECK(rmt_rx_register_event_callbacks(_channel, &cbs, this));
 
     ESP_LOGI(TAG, "enable RMT RX channel");
     ESP_ERROR_CHECK(rmt_enable(_channel));
@@ -52,10 +44,10 @@ void IrRemoteRx::begin(gpio_num_t rx_gpio_num, uint32_t resolution_hz)
     };
     // save the received RMT symbols
     ESP_LOGI(TAG, "start receive RMT symbols");
-    _armReceive();
+    ESP_ERROR_CHECK(rmt_receive(_channel, _symbols_buffer[_fill_index], sizeof(_symbols_buffer[0]), &_receive_config));
 }
 
-bool IrRemoteRx::receiveNEC(ir_code_t *received_code,TickType_t timeout)
+bool IrRemoteRx::receiveNEC(ir_code_t *received_code, TickType_t timeout)
 {
     rmt_rx_done_event_data_t rx_data;
 
@@ -65,8 +57,8 @@ bool IrRemoteRx::receiveNEC(ir_code_t *received_code,TickType_t timeout)
     {
         // parse the receive symbols and print the result
         *received_code = nec_decode_frame(rx_data.received_symbols, rx_data.num_symbols);
-        // start receive again
-        _armReceive();
+        // the channel was already re-armed from the ISR; give the frame buffer back to it
+        _releaseBuffer(rx_data.received_symbols);
     }
     return received_status;
 }
@@ -78,8 +70,8 @@ bool IrRemoteRx::receiveSony(ir_code_t *received_code, TickType_t timeout)
     if (received_status)
     {
         *received_code = sony_decode_frame(rx_data.received_symbols, rx_data.num_symbols);
-        // re-arm using the shared receive window (NEC range covers Sony)
-        _armReceive();
+        // the channel was already re-armed from the ISR (NEC range covers Sony); give the frame buffer back
+        _releaseBuffer(rx_data.received_symbols);
     }
     return received_status;
 }
@@ -110,8 +102,8 @@ bool IrRemoteRx::receiveAuto(ir_code_t *received_code, ir_remote_protocol *detec
         {
             *received_code = (ir_code_t){0, 0}; // unknown frame; leave *detected as-is
         }
-        // re-arm using the shared receive window (NEC range covers Sony)
-        _armReceive();
+        // the channel was already re-armed from the ISR (NEC range covers Sony); give the frame buffer back
+        _releaseBuffer(rx_data.received_symbols);
     }
     return received_status;
 }
@@ -123,7 +115,7 @@ bool IrRemoteRx::receiveData(uint8_t *out, uint8_t *out_len, TickType_t timeout)
     if (received_status)
     {
         int len = data_decode_frame(rx_data.received_symbols, rx_data.num_symbols, out);
-        _armReceive();
+        _releaseBuffer(rx_data.received_symbols);
         if (len < 0)
             return false; // garbled / CRC mismatch — a frame arrived but is unusable
         *out_len = (uint8_t)len;
@@ -132,13 +124,36 @@ bool IrRemoteRx::receiveData(uint8_t *out, uint8_t *out_len, TickType_t timeout)
     return false;
 }
 
-bool _rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data)
+void IrRemoteRx::_releaseBuffer(const rmt_symbol_word_t *symbols)
+{
+    __asm__ volatile("memw" ::: "memory"); // finish reading the symbols before the ISR may reuse them
+    _held[symbols == _symbols_buffer[1]] = false;
+}
+
+// Runs in the RMT ISR. The driver has already switched the channel back to the enabled
+// state, so rmt_receive() is legal here: re-arming immediately closes the window in which
+// the old consumer-side re-arm (up to one poll period later) could miss the next repeat code.
+void IrRemoteRx::_onReceiveDone(const rmt_rx_done_event_data_t *edata, BaseType_t *high_task_wakeup)
+{
+    const uint8_t other = _fill_index ^ 1;
+    // the other buffer is still owned by the consumer: drop this frame and refill the same
+    // buffer (the old code did not receive at all while the consumer had not caught up)
+    if (!_held[other])
+    {
+        _held[_fill_index] = true;
+        __asm__ volatile("memw" ::: "memory");
+        if (xQueueSendFromISR(_receive_queue, edata, high_task_wakeup) == pdPASS)
+            _fill_index = other;
+        else
+            _held[_fill_index] = false;
+    }
+    // same arguments as the begin() arming call, which cannot fail after it succeeded once
+    rmt_receive(_channel, _symbols_buffer[_fill_index], sizeof(_symbols_buffer[0]), &_receive_config);
+}
+
+bool IrRemoteRx::_rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data)
 {
     BaseType_t high_task_wakeup = pdFALSE;
-    QueueHandle_t receive_queue = (QueueHandle_t)user_data;
-
-    // send the received RMT symbols to the parser task
-    xQueueSendFromISR(receive_queue, edata, &high_task_wakeup);
-
+    static_cast<IrRemoteRx *>(user_data)->_onReceiveDone(edata, &high_task_wakeup);
     return high_task_wakeup == pdTRUE;
 }
