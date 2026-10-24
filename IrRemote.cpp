@@ -47,63 +47,10 @@ bool IrRemote::getIrCode(uint32_t timeout_ms)
     return retrieved_status;
 }
 
-bool IrRemote::sendIrCode(ir_code_t send_code, uint32_t timeout_ms)
+// Remote-code TX is always NEC, whatever the receive protocol. RX adds SONY_IR_CODE_OFFSET to a
+// Sony press and TX would have to subtract it, and the Auto receive mode follows whatever frame
+// was seen last, which made the same `ir_send_code N` go out as NEC or Sony depending on history.
+bool IrRemote::sendIrCode(ir_code_t send_code)
 {
-    bool sent_status = false;
-    switch (_ir_protocol)
-    {
-    case IR_AUTO:
-        // TX is bench-only; transmit with the last detected protocol (IR_NEC until
-        // the first frame is received).
-        sent_status = (_detected_protocol == IR_SONY)
-                          ? remoteTx.sendSony(send_code.address, send_code.command)
-                          : remoteTx.sendNEC(send_code.address, send_code.command);
-        break;
-    case IR_NEC:
-        sent_status = remoteTx.sendNEC(send_code.address, send_code.command);
-        break;
-    case IR_SONY:
-        sent_status = remoteTx.sendSony(send_code.address, send_code.command);
-        break;
-    case IR_DATA:
-        break; // data mode uses sendData(), not the ir_code_t path
-    };
-    return sent_status;
-}
-
-bool IrRemote::testReadIrCode(uint32_t timeout_ms)
-{
-    return getIrCode(timeout_ms);
-}
-
-bool IrRemote::testSendIrCode(void)
-{
-    switch (_ir_protocol)
-    {
-    case IR_AUTO:
-    {
-        // bench helper: mirror sendIrCode's Auto behaviour (detected protocol)
-        if (_detected_protocol == IR_SONY)
-        {
-            const ir_code_t sony_code = {.address = 0x01, .command = 0x15};
-            return remoteTx.sendSony(sony_code.address, sony_code.command);
-        }
-        const ir_code_t nec_code = {.address = 0x0440, .command = 0x3003};
-        return remoteTx.sendNEC(nec_code.address, nec_code.command);
-    }
-    case IR_NEC:
-    {
-        const ir_code_t nec_code = {.address = 0x0440, .command = 0x3003};
-        return remoteTx.sendNEC(nec_code.address, nec_code.command);
-    }
-    case IR_SONY:
-    {
-        // Sony SIRC example: address 1 (TV), command 21 (power)
-        const ir_code_t sony_code = {.address = 0x01, .command = 0x15};
-        return remoteTx.sendSony(sony_code.address, sony_code.command);
-    }
-    case IR_DATA:
-        break; // no remote-code test frame for data mode
-    }
-    return false;
+    return remoteTx.sendNEC(send_code.address, send_code.command);
 }

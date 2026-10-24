@@ -16,7 +16,9 @@ public:
     void begin(ir_remote_protocol irProtocol, int txPin, int rxPin);
 
     bool getIrCode(uint32_t timeout);
-    bool sendIrCode(ir_code_t send_code, uint32_t timeout_ms);
+    // Always sends a NEC frame, in every receive protocol (including IR_DATA); the TX protocol never
+    // follows the receive mode. Returns true when the frame was queued.
+    bool sendIrCode(ir_code_t send_code);
 
     // _ir_protocol is written here (e.g. from the UI/menu task) and read in
     // getIrCode() from the IR-poll task on a different core. Mark it volatile and
@@ -29,9 +31,9 @@ public:
     }
     ir_remote_protocol getProtocol(void) { return _ir_protocol; }
 
-    // Last protocol actually decoded from a received frame. Written and read only
-    // inside the IR-poll task (getIrCode -> firmware poll), so no cross-core barrier
-    // is needed (unlike _ir_protocol, which the menu task also writes).
+    // Last protocol actually decoded from a valid received frame (IR_NEC until the first one).
+    // Written and read only inside the IR-poll task (getIrCode -> firmware poll), so no
+    // cross-core barrier is needed (unlike _ir_protocol, which the menu task also writes).
     ir_remote_protocol getDetectedProtocol(void) { return _detected_protocol; }
 
     void transmitRange(uint16_t cm) { remoteTx.transmitRange(cm); }
@@ -45,9 +47,6 @@ public:
 
     uint8_t getIrAddress(void) { return lowByte(_received_code.address); }
     uint8_t getIrCommand(void) { return lowByte(_received_code.command); }
-
-    bool testReadIrCode(uint32_t timeout_ms = 1000);
-    bool testSendIrCode(void);
 
 private:
     IrRemoteTx remoteTx;
