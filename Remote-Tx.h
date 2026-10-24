@@ -1,6 +1,8 @@
 #pragma once
 
 #include "driver/rmt_tx.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "Ir-NEC.h"
 #include "Ir-Sony.h"
@@ -47,7 +49,6 @@ public:
     ~IrRemoteTx();
 
     void begin(gpio_num_t tx_gpio_num, uint32_t resolution_hz);
-    void updateCarrierFrequency(uint32_t frequency);
 
     bool sendNEC(uint16_t address, uint16_t command);
     bool sendSony(uint16_t address, uint16_t command);
@@ -65,7 +66,36 @@ public:
     void transmitRange(uint16_t cm);
     void clearTransmitRange(void);
 
+    // Thread safety: sendNEC, sendSony, sendData and transmitRange take _tx_lock, so any task may
+    // call them (Logo VM tasks on core 1, IR Share on the display task on core 0). A second sender
+    // waits for the first frame to finish instead of rewriting the buffers it is still reading.
+    // clearTransmitRange is one aligned word store and takes no lock.
+
 private:
+    // Holds _tx_lock for the rest of the scope. A null lock (begin() not called) is a no-op.
+    class TxLock
+    {
+    public:
+        explicit TxLock(SemaphoreHandle_t lock) : _lock(lock)
+        {
+            if (_lock)
+                xSemaphoreTake(_lock, portMAX_DELAY);
+        }
+        ~TxLock()
+        {
+            if (_lock)
+                xSemaphoreGive(_lock);
+        }
+        TxLock(const TxLock &)            = delete;
+        TxLock &operator=(const TxLock &) = delete;
+
+    private:
+        SemaphoreHandle_t _lock;
+    };
+
+    void updateCarrierFrequency(uint32_t frequency); // caller holds _tx_lock
+    SemaphoreHandle_t _tx_lock = NULL;               // created in begin()
+
     rmt_channel_handle_t _channel;
     rmt_carrier_config_t _carrier_cfg;
     rmt_transmit_config_t _transmit_config;
@@ -77,16 +107,16 @@ private:
     uint32_t _current_carrier_hz;        // cache to avoid redundant rmt_apply_carrier
 
     // Active range carrier override; 0 = inactive (sends use the per-protocol carrier).
-    // Written by transmitRange() and read by sendNEC/sendSony, reached only from the
-    // Logo VM tasks (logoVMTask AND bgLogoVMTask) — both on Core 1, so this aligned
-    // 32-bit word needs no volatile/barrier (no torn reads under same-core preemption).
-    // NOTE: concurrent IR TX from both VMs simultaneously is unguarded (no mutex),
-    // consistent with the existing IR opcode handling; that is pathological usage.
-    uint32_t _range_carrier_hz = 0;
+    // Written by transmitRange() (under _tx_lock) and clearTransmitRange() (lock-free, from the
+    // program-stop path), read by the senders under _tx_lock. An aligned 32-bit word, so a read is
+    // never torn; volatile so a sender sees a clear on its next send.
+    volatile uint32_t _range_carrier_hz = 0;
 
+    uint32_t _carrierFor(uint32_t protocol_hz); // range override if active, else the protocol's carrier
     uint32_t rangeToCarrierHz(uint16_t cm); // clamp + linear interp over IR_RANGE_CALIBRATION
 
     // Scratch buffer for the outgoing data frame (built then pushed via _copy_encoder).
-    // Member (not stack) to avoid ~584 bytes of stack pressure on the Logo VM task.
+    // Member (not stack) to avoid ~584 bytes of stack pressure on the Logo VM task. Guarded by
+    // _tx_lock: the copy encoder reads it from the ISR until the frame is fully sent.
     rmt_symbol_word_t _data_frame[IR_DATA_MAX_FRAME_SYMBOLS];
 };

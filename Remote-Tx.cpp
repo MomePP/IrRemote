@@ -19,6 +19,9 @@ IrRemoteTx::~IrRemoteTx()
 
 void IrRemoteTx::begin(gpio_num_t tx_gpio_num, uint32_t resolution_hz)
 {
+    _tx_lock = xSemaphoreCreateMutex();
+    assert(_tx_lock);
+
     ESP_LOGI(TAG, "create RMT TX channel");
     rmt_tx_channel_config_t tx_channel_cfg = {
         .gpio_num = tx_gpio_num,
@@ -77,7 +80,8 @@ void IrRemoteTx::updateCarrierFrequency(uint32_t frequency)
 
 bool IrRemoteTx::sendNEC(uint16_t address, uint16_t command)
 {
-    uint32_t target = _range_carrier_hz ? _range_carrier_hz : IR_TX_CARRIER_FREQ_HZ_NEC;
+    TxLock lock(_tx_lock);
+    uint32_t target = _carrierFor(IR_TX_CARRIER_FREQ_HZ_NEC);
     if (_current_carrier_hz != target)
         updateCarrierFrequency(target);
     ESP_LOGD(TAG, "send NEC frame");
@@ -93,8 +97,9 @@ bool IrRemoteTx::sendNEC(uint16_t address, uint16_t command)
 // Do not call from a latency-sensitive task (e.g. the Logo VM loop).
 bool IrRemoteTx::sendSony(uint16_t address, uint16_t command)
 {
+    TxLock lock(_tx_lock);
     ESP_LOGD(TAG, "send Sony frame");
-    uint32_t target = _range_carrier_hz ? _range_carrier_hz : IR_TX_CARRIER_FREQ_HZ_SONY;
+    uint32_t target = _carrierFor(IR_TX_CARRIER_FREQ_HZ_SONY);
     if (_current_carrier_hz != target)
         updateCarrierFrequency(target);
 
@@ -120,6 +125,13 @@ bool IrRemoteTx::sendSony(uint16_t address, uint16_t command)
         vTaskDelay(pdMS_TO_TICKS(SONY_FRAME_PERIOD_MS));
     }
     return ok;
+}
+
+// One read of the override: clearTransmitRange() can zero it between two reads.
+uint32_t IrRemoteTx::_carrierFor(uint32_t protocol_hz)
+{
+    const uint32_t range_hz = _range_carrier_hz;
+    return range_hz ? range_hz : protocol_hz;
 }
 
 uint32_t IrRemoteTx::rangeToCarrierHz(uint16_t cm)
@@ -148,6 +160,7 @@ uint32_t IrRemoteTx::rangeToCarrierHz(uint16_t cm)
 
 void IrRemoteTx::transmitRange(uint16_t cm)
 {
+    TxLock lock(_tx_lock);
     _range_carrier_hz = rangeToCarrierHz(cm);
     updateCarrierFrequency(_range_carrier_hz); // existing clamp + apply + cache
     ESP_LOGI(TAG, "transmitRange: %u cm -> carrier %u Hz", cm, _range_carrier_hz);
@@ -166,7 +179,8 @@ bool IrRemoteTx::sendData(const uint8_t *bytes, uint8_t len)
     if (len > IR_DATA_MAX_PAYLOAD)
         return false;
 
-    uint32_t target = _range_carrier_hz ? _range_carrier_hz : IR_TX_CARRIER_FREQ_HZ_DATA;
+    TxLock lock(_tx_lock);
+    uint32_t target = _carrierFor(IR_TX_CARRIER_FREQ_HZ_DATA);
     if (_current_carrier_hz != target)
         updateCarrierFrequency(target);
 
