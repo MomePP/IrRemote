@@ -1,6 +1,7 @@
 #include "Remote-Tx.h"
 
 #include "esp_log.h"
+#include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 static const char *TAG = "IrRemoteTx";
@@ -172,12 +173,15 @@ void IrRemoteTx::clearTransmitRange(void)
     ESP_LOGI(TAG, "clearTransmitRange: revert to per-protocol carrier");
 }
 
-// NOTE: blocks the caller until the whole frame is sent (~frame duration). Data uses
+// NOTE: blocks the caller for the random back-off plus the whole frame (~frame duration). Data uses
 // the 38 kHz carrier; honors the range-carrier override exactly like sendNEC.
 bool IrRemoteTx::sendData(const uint8_t *bytes, uint8_t len)
 {
     if (len > IR_DATA_MAX_PAYLOAD)
         return false;
+
+    // Back off before taking the lock so a sender queued behind this one is not held up by the wait.
+    vTaskDelay(pdMS_TO_TICKS(esp_random() % (IR_DATA_TX_BACKOFF_MAX_MS + 1)));
 
     TxLock lock(_tx_lock);
     uint32_t target = _carrierFor(IR_TX_CARRIER_FREQ_HZ_DATA);

@@ -14,6 +14,10 @@
 #define IR_TX_CARRIER_FREQ_HZ_MAX  40000 // raised from 38000 so Sony's 40kHz is not clamped
 #define IR_TX_CARRIER_FREQ_HZ_MIN  30000
 #define IR_TX_CARRIER_DUTY         0.33
+// Data frames wait a random 0..IR_DATA_TX_BACKOFF_MAX_MS before they go out, so two boards that publish
+// on the same period drift apart instead of overlapping every time. This is the most latency a
+// sendData() call adds; about half of it on average.
+#define IR_DATA_TX_BACKOFF_MAX_MS 100
 #define IR_TX_QUEUE_DEPTH         4 // transactions allowed to be pending in the driver
 // rmt_transmit() keeps only a pointer to the payload and the encoder reads it later (from the
 // ISR once the frame is queued behind another), so every queued frame needs its own slot.
