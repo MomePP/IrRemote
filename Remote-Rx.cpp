@@ -127,6 +127,34 @@ bool IrRemoteRx::receiveData(uint8_t *out, uint8_t *out_len, TickType_t timeout)
     return false;
 }
 
+ir_data_rx_result IrRemoteRx::receiveDataOrNec(uint8_t *out, uint8_t *out_len, ir_code_t *nec_code, TickType_t timeout)
+{
+    rmt_rx_done_event_data_t rx_data;
+    if (xQueueReceive(_receive_queue, &rx_data, timeout) != pdPASS)
+        return IR_DATA_RX_NONE;
+
+    ir_data_rx_result result = IR_DATA_RX_NONE;
+    int len = data_decode_frame(rx_data.received_symbols, rx_data.num_symbols, out);
+    if (len >= 0)
+    {
+        *out_len = (uint8_t)len;
+        result   = IR_DATA_RX_FRAME;
+    }
+    else if (rx_data.num_symbols == IR_NEC_RX_FRAME_SYMBOL_COUNT)
+    {
+        // The NEC leader mark (9 ms) is outside the data leader's tolerance, so a data frame never
+        // reaches this branch as a NEC code, and a NEC frame never decodes as data.
+        const ir_code_t code = nec_decode_frame(rx_data.received_symbols, rx_data.num_symbols);
+        if (code.address != 0 || code.command != 0)
+        {
+            *nec_code = code;
+            result    = IR_DATA_RX_NEC_CODE;
+        }
+    }
+    _releaseBuffer(rx_data.received_symbols);
+    return result;
+}
+
 void IrRemoteRx::_releaseBuffer(const rmt_symbol_word_t *symbols)
 {
     __asm__ volatile("memw" ::: "memory"); // finish reading the symbols before the ISR may reuse them

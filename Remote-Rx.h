@@ -42,6 +42,12 @@ public:
     // true. Returns false on timeout, a garbled frame, or a CRC mismatch.
     bool receiveData(uint8_t *out, uint8_t *out_len, TickType_t timeout);
 
+    // Like receiveData, but a full 34-symbol NEC remote frame that fails to decode as data is
+    // decoded as NEC and returned as IR_DATA_RX_NEC_CODE in *nec_code, so a remote control still
+    // works while the board is in data mode. NEC repeat frames and a {0,0} decode (indistinguishable
+    // from a garbled frame) are reported as IR_DATA_RX_NONE.
+    ir_data_rx_result receiveDataOrNec(uint8_t *out, uint8_t *out_len, ir_code_t *nec_code, TickType_t timeout);
+
 private:
     static bool _rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data);
     void _onReceiveDone(const rmt_rx_done_event_data_t *edata, BaseType_t *high_task_wakeup);

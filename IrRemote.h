@@ -45,6 +45,12 @@ public:
         return remoteRx.receiveData(out, out_len, pdMS_TO_TICKS(timeout_ms));
     }
 
+    // Data-mode poll that also hands over a NEC remote code (see IrRemoteRx::receiveDataOrNec).
+    ir_data_rx_result receiveDataOrNec(uint8_t *out, uint8_t *out_len, ir_code_t *nec_code, uint32_t timeout_ms)
+    {
+        return remoteRx.receiveDataOrNec(out, out_len, nec_code, pdMS_TO_TICKS(timeout_ms));
+    }
+
     uint8_t getIrAddress(void) { return lowByte(_received_code.address); }
     uint8_t getIrCommand(void) { return lowByte(_received_code.command); }
 
