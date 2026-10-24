@@ -3,10 +3,6 @@
 
 static const char *TAG = "sony_codec";
 
-// Holds the most recently decoded Sony scan code. File-scope (not in the header)
-// so each translation unit does not get its own private copy.
-static ir_code_t s_sony_code;
-
 static inline uint16_t sony_ticks(uint64_t us, uint32_t resolution)
 {
     return (uint16_t)(us * resolution / 1000000ULL);
@@ -43,7 +39,7 @@ static inline bool sony_check_in_range(uint32_t signal_duration, uint32_t spec_d
            (signal_duration > (spec_duration - IR_SONY_DECODE_MARGIN));
 }
 
-ir_code_t sony_decode_frame(rmt_symbol_word_t *rmt_sony_symbols, size_t symbol_num)
+bool sony_decode_frame(rmt_symbol_word_t *rmt_sony_symbols, size_t symbol_num, ir_code_t *out)
 {
     ESP_LOGD(TAG, "Sony frame start--- num=%u", (unsigned)symbol_num);
     for (size_t i = 0; i < symbol_num; i++)
@@ -54,17 +50,13 @@ ir_code_t sony_decode_frame(rmt_symbol_word_t *rmt_sony_symbols, size_t symbol_n
 
     if (symbol_num != IR_SONY_RX_SYMBOL_COUNT)
     {
-        s_sony_code = (ir_code_t){0, 0};
         ESP_LOGD(TAG, "Unknown Sony frame");
-        return s_sony_code;
+        return false;
     }
 
     // validate header mark
     if (!sony_check_in_range(rmt_sony_symbols[0].duration0, SONY_HEADER_MARK))
-    {
-        s_sony_code = (ir_code_t){0, 0};
-        return s_sony_code;
-    }
+        return false;
 
     uint16_t bits = 0;
     for (int i = 0; i < SONY_FRAME_BITS; i++)
@@ -73,14 +65,11 @@ ir_code_t sony_decode_frame(rmt_symbol_word_t *rmt_sony_symbols, size_t symbol_n
         if (sony_check_in_range(mark, SONY_BIT_ONE_MARK))
             bits |= (1u << i);
         else if (!sony_check_in_range(mark, SONY_BIT_ZERO_MARK))
-        {
-            s_sony_code = (ir_code_t){0, 0}; // neither a one nor a zero
-            return s_sony_code;
-        }
+            return false; // neither a one nor a zero
     }
 
-    s_sony_code.command = bits & SONY_COMMAND_MASK;
-    s_sony_code.address = (bits >> SONY_COMMAND_BITS) & SONY_ADDRESS_MASK;
-    ESP_LOGD(TAG, "Address=%02X, Command=%02X", s_sony_code.address, s_sony_code.command);
-    return s_sony_code;
+    out->command = bits & SONY_COMMAND_MASK;
+    out->address = (bits >> SONY_COMMAND_BITS) & SONY_ADDRESS_MASK;
+    ESP_LOGD(TAG, "Address=%02X, Command=%02X", out->address, out->command);
+    return true;
 }

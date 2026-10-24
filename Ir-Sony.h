@@ -41,9 +41,12 @@ extern "C"
 
     /**
      * @brief Decode RMT symbols into a Sony SIRC scan code.
-     *        Returns {0,0} on malformed/unknown frames.
+     *
+     * @param[out] out Written only when the frame is valid. {0,0} is a legal Sony scan code
+     *                 (address 0, command 0), so validity is the return value, not the code.
+     * @return true for a well-formed 12-bit frame, false for a wrong symbol count, header or bit.
      */
-    ir_code_t sony_decode_frame(rmt_symbol_word_t *rmt_sony_symbols, size_t symbol_num);
+    bool sony_decode_frame(rmt_symbol_word_t *rmt_sony_symbols, size_t symbol_num, ir_code_t *out);
 
 #ifdef __cplusplus
 }

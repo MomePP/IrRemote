@@ -25,12 +25,16 @@ public:
 
     void begin(gpio_num_t rx_gpio_num, uint32_t resolution_hz);
 
+    // receiveNEC returns true for any frame it dequeued (a malformed frame yields {0,0}).
+    // receiveSony returns true only for a valid Sony frame; a frame that is not one is consumed
+    // silently, like a timeout.
     bool receiveNEC(ir_code_t *received_code, TickType_t timeout);
     bool receiveSony(ir_code_t *received_code, TickType_t timeout);
 
     // Auto-detect: dequeue one frame from the shared window and dispatch by RMT
     // symbol count. Writes *detected (IR_NEC / IR_SONY) for the frame's actual
-    // protocol; leaves *detected unchanged on an unrecognised symbol count.
+    // protocol. A 13-symbol burst that is not a valid Sony frame, or an unrecognised symbol count,
+    // returns false and leaves *detected unchanged.
     bool receiveAuto(ir_code_t *received_code, ir_remote_protocol *detected, TickType_t timeout);
 
     // Dequeue one frame from the shared window and decode it as an IR_DATA frame.

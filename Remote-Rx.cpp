@@ -69,7 +69,8 @@ bool IrRemoteRx::receiveSony(ir_code_t *received_code, TickType_t timeout)
     bool received_status = xQueueReceive(_receive_queue, &rx_data, timeout) == pdPASS;
     if (received_status)
     {
-        *received_code = sony_decode_frame(rx_data.received_symbols, rx_data.num_symbols);
+        // a NEC frame or noise is not a Sony press: report no code instead of {0,0}
+        received_status = sony_decode_frame(rx_data.received_symbols, rx_data.num_symbols, received_code);
         // the channel was already re-armed from the ISR (NEC range covers Sony); give the frame buffer back
         _releaseBuffer(rx_data.received_symbols);
     }
@@ -89,8 +90,10 @@ bool IrRemoteRx::receiveAuto(ir_code_t *received_code, ir_remote_protocol *detec
         size_t symbol_num = rx_data.num_symbols;
         if (symbol_num == IR_SONY_RX_SYMBOL_COUNT)
         {
-            *received_code = sony_decode_frame(rx_data.received_symbols, symbol_num);
-            *detected = IR_SONY;
+            // a malformed 13-symbol burst must neither report a code nor flip *detected to Sony
+            received_status = sony_decode_frame(rx_data.received_symbols, symbol_num, received_code);
+            if (received_status)
+                *detected = IR_SONY;
         }
         else if (symbol_num == IR_NEC_RX_FRAME_SYMBOL_COUNT ||
                  symbol_num == IR_NEC_RX_REPEAT_SYMBOL_COUNT)
@@ -100,7 +103,7 @@ bool IrRemoteRx::receiveAuto(ir_code_t *received_code, ir_remote_protocol *detec
         }
         else
         {
-            *received_code = (ir_code_t){0, 0}; // unknown frame; leave *detected as-is
+            received_status = false; // unknown frame: no code, *detected unchanged
         }
         // the channel was already re-armed from the ISR (NEC range covers Sony); give the frame buffer back
         _releaseBuffer(rx_data.received_symbols);
