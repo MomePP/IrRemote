@@ -58,8 +58,8 @@ public:
     bool sendSony(uint16_t address, uint16_t command);
 
     // Send one IR data frame (pulse-distance, CRC-8). len <= IR_DATA_MAX_PAYLOAD.
-    // Synchronous: blocks the caller until the frame is fully transmitted
-    // (~frame duration, hundreds of ms at the data bit rate). Returns false if
+    // Synchronous: waits a random 0..IR_DATA_TX_BACKOFF_MAX_MS, then for the transmit lock, then blocks
+    // until the frame is fully transmitted (~frame duration, hundreds of ms at the data bit rate). Returns false if
     // len is too large or the RMT transmit/wait fails.
     bool sendData(const uint8_t *bytes, uint8_t len);
 
@@ -72,7 +72,9 @@ public:
 
     // Thread safety: sendNEC, sendSony, sendData and transmitRange take _tx_lock, so any task may
     // call them (Logo VM tasks on core 1, IR Share on the display task on core 0). A second sender
-    // waits for the first frame to finish instead of rewriting the buffers it is still reading.
+    // waits for the first call to return instead of rewriting the buffers it is still reading. sendNEC
+    // returns once its frame is queued, so a transmitRange() right after it can still retune the
+    // carrier while that frame is on air.
     // clearTransmitRange is one aligned word store and takes no lock.
 
 private:

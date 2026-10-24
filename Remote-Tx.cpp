@@ -162,9 +162,11 @@ uint32_t IrRemoteTx::rangeToCarrierHz(uint16_t cm)
 void IrRemoteTx::transmitRange(uint16_t cm)
 {
     TxLock lock(_tx_lock);
-    _range_carrier_hz = rangeToCarrierHz(cm);
-    updateCarrierFrequency(_range_carrier_hz); // existing clamp + apply + cache
-    ESP_LOGI(TAG, "transmitRange: %u cm -> carrier %u Hz", cm, _range_carrier_hz);
+    // One read: clearTransmitRange() takes no lock and can zero _range_carrier_hz between a store and a reload.
+    const uint32_t range_hz = rangeToCarrierHz(cm);
+    _range_carrier_hz = range_hz;
+    updateCarrierFrequency(range_hz); // existing clamp + apply + cache
+    ESP_LOGI(TAG, "transmitRange: %u cm -> carrier %u Hz", cm, range_hz);
 }
 
 void IrRemoteTx::clearTransmitRange(void)

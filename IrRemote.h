@@ -31,7 +31,9 @@ public:
     }
     ir_remote_protocol getProtocol(void) { return _ir_protocol; }
 
-    // Last protocol actually decoded from a valid received frame (IR_NEC until the first one).
+    // Last protocol decoded from a received frame (IR_NEC until the first one). A Sony frame
+    // counts only when it decodes cleanly; in Auto a NEC frame counts by symbol count, in forced NEC
+    // mode every received frame counts.
     // Written and read only inside the IR-poll task (getIrCode -> firmware poll), so no
     // cross-core barrier is needed (unlike _ir_protocol, which the menu task also writes).
     ir_remote_protocol getDetectedProtocol(void) { return _detected_protocol; }
