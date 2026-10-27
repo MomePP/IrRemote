@@ -182,10 +182,11 @@ void IrRemoteTx::clearTransmitRange(void)
 
 // Waits until the receiver pin has been quiet for IR_LBS_QUIET_US, for at most IR_LBS_MAX_WAIT_US (Ir-Lbs.h
 // decides; this loop supplies the clock, the pin's last edge and the sleeping). The edge timestamp is read before the
-// clock so it can never be ahead of it. After sendData or sendSony a board's own previous frame never holds this up: its
-// last edge is more than the 32.767 ms idle tail old by the time the call returned. sendNEC returns as soon as its frame
-// is queued, so a data frame sent right after it does wait for the echo of that NEC frame (the RMT queue would hold the
-// data frame behind it, and behind the idle tail of the NEC encoder's ending symbol, anyway).
+// clock so it can never be ahead of it. After sendData a board's own previous frame never holds this up: its last edge is
+// more than the 32.767 ms idle tail old by the time the call returned (sendSony ends with a 45 ms delay after its last frame,
+// which does the same). sendNEC returns as soon as its frame is queued, so a data frame sent right after it does wait for
+// the echo of that NEC frame (the RMT queue would hold the data frame behind it, and behind the idle tail of the NEC
+// encoder's ending symbol, anyway).
 void IrRemoteTx::_listenBeforeSend(void)
 {
     if (!_air)
