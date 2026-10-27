@@ -18,9 +18,12 @@ void IrRemote::begin(ir_remote_protocol irProtocol, int txPin, int rxPin)
     _rxPin = (gpio_num_t)rxPin;
 
     if (_txPin >= 0)
-        remoteTx.begin(_txPin, IR_RESOLUTION_HZ);
+        remoteTx.begin(_txPin, IR_RESOLUTION_HZ, _rxPin >= 0 ? &remoteAir : nullptr);
     if (_rxPin >= 0)
+    {
         remoteRx.begin(_rxPin, IR_RESOLUTION_HZ);
+        remoteAir.begin(_rxPin); // after the RMT RX channel has configured the pin, on the same core
+    }
 }
 
 bool IrRemote::getIrCode(uint32_t timeout_ms)

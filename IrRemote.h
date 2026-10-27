@@ -2,6 +2,7 @@
 
 #include "Arduino.h"
 
+#include "Remote-Air.h"
 #include "Remote-Rx.h"
 #include "Remote-Tx.h"
 
@@ -59,6 +60,7 @@ public:
 private:
     IrRemoteTx remoteTx;
     IrRemoteRx remoteRx;
+    IrRemoteAir remoteAir; // receiver-pin edges, which sendData listens to before it transmits
 
     gpio_num_t _txPin = GPIO_NUM_NC;
     gpio_num_t _rxPin = GPIO_NUM_NC;

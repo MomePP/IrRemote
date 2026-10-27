@@ -7,6 +7,7 @@
 #include "Ir-NEC.h"
 #include "Ir-Sony.h"
 #include "Ir-Data.h"
+#include "Remote-Air.h"
 
 #define IR_TX_CARRIER_FREQ_HZ_NEC  38000
 #define IR_TX_CARRIER_FREQ_HZ_SONY 40000
@@ -14,10 +15,6 @@
 #define IR_TX_CARRIER_FREQ_HZ_MAX  40000 // raised from 38000 so Sony's 40kHz is not clamped
 #define IR_TX_CARRIER_FREQ_HZ_MIN  30000
 #define IR_TX_CARRIER_DUTY         0.33
-// Data frames wait a random 0..IR_DATA_TX_BACKOFF_MAX_MS before they go out, so two boards that publish
-// on the same period drift apart instead of overlapping every time. This is the most latency a
-// sendData() call adds; about half of it on average.
-#define IR_DATA_TX_BACKOFF_MAX_MS 100
 #define IR_TX_QUEUE_DEPTH         4 // transactions allowed to be pending in the driver
 // rmt_transmit() keeps only a pointer to the payload and the encoder reads it later (from the
 // ISR once the frame is queued behind another), so every queued frame needs its own slot.
@@ -52,15 +49,18 @@ public:
     IrRemoteTx();
     ~IrRemoteTx();
 
-    void begin(gpio_num_t tx_gpio_num, uint32_t resolution_hz);
+    // `air` is the receiver-pin edge tracker that data frames listen to before they go out (Ir-Lbs.h); null = send at once.
+    void begin(gpio_num_t tx_gpio_num, uint32_t resolution_hz, const IrRemoteAir *air = nullptr);
 
     bool sendNEC(uint16_t address, uint16_t command);
     bool sendSony(uint16_t address, uint16_t command);
 
     // Send one IR data frame (pulse-distance, CRC-8). len <= IR_DATA_MAX_PAYLOAD.
-    // Synchronous: waits a random 0..IR_DATA_TX_BACKOFF_MAX_MS, then for the transmit lock, then blocks
-    // until the frame is fully transmitted (~frame duration, hundreds of ms at the data bit rate). Returns false if
-    // len is too large or the RMT transmit/wait fails.
+    // Synchronous: takes the transmit lock, then listens before it sends: it waits, for at most IR_LBS_MAX_WAIT_US,
+    // until the receiver has seen no IR activity for IR_LBS_QUIET_US, then takes a random 0..IR_LBS_SLOT_MAX_US slot
+    // and reads again, and a board that had to wait adds a random 0..IR_LBS_JITTER_MAX_US of quiet (see Ir-Lbs.h).
+    // Then it blocks until the frame is fully transmitted (~frame duration, hundreds of ms at the data bit rate).
+    // Returns false if len is too large or the RMT transmit/wait fails.
     bool sendData(const uint8_t *bytes, uint8_t len);
 
     // Set IR TX usable range: maps cm -> carrier Hz via IR_RANGE_CALIBRATION (clamped
@@ -72,9 +72,10 @@ public:
 
     // Thread safety: sendNEC, sendSony, sendData and transmitRange take _tx_lock, so any task may
     // call them (Logo VM tasks on core 1, IR Share on the display task on core 0). A second sender
-    // waits for the first call to return instead of rewriting the buffers it is still reading. sendNEC
-    // returns once its frame is queued, so a transmitRange() right after it can still retune the
-    // carrier while that frame is on air.
+    // waits for the first call to return instead of rewriting the buffers it is still reading, and
+    // sendData holds the lock while it listens too, so a queued sender never listens for a frame
+    // another task of this board is about to send. sendNEC returns once its frame is queued, so a
+    // transmitRange() right after it can still retune the carrier while that frame is on air.
     // clearTransmitRange is one aligned word store and takes no lock.
 
 private:
@@ -100,7 +101,9 @@ private:
     };
 
     void updateCarrierFrequency(uint32_t frequency); // caller holds _tx_lock
+    void _listenBeforeSend(void);                    // caller holds _tx_lock; returns when the air is clear or the wait ran out
     SemaphoreHandle_t _tx_lock = NULL;               // created in begin()
+    const IrRemoteAir *_air    = nullptr;            // receiver-pin edge tracker; null = do not listen
 
     rmt_channel_handle_t _channel;
     rmt_carrier_config_t _carrier_cfg;

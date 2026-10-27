@@ -2,9 +2,13 @@
 
 #include "esp_log.h"
 #include "esp_random.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "Ir-Lbs.h"
 static const char *TAG = "IrRemoteTx";
+
+static constexpr uint32_t IR_US_PER_MS = 1000;
 
 IrRemoteTx::IrRemoteTx()
 {
@@ -18,8 +22,9 @@ IrRemoteTx::~IrRemoteTx()
 {
 }
 
-void IrRemoteTx::begin(gpio_num_t tx_gpio_num, uint32_t resolution_hz)
+void IrRemoteTx::begin(gpio_num_t tx_gpio_num, uint32_t resolution_hz, const IrRemoteAir *air)
 {
+    _air     = air;
     _tx_lock = xSemaphoreCreateMutex();
     assert(_tx_lock);
 
@@ -175,24 +180,60 @@ void IrRemoteTx::clearTransmitRange(void)
     ESP_LOGI(TAG, "clearTransmitRange: revert to per-protocol carrier");
 }
 
-// NOTE: blocks the caller for the random back-off plus the whole frame (~frame duration). Data uses
-// the 38 kHz carrier; honors the range-carrier override exactly like sendNEC.
+// Waits until the receiver pin has been quiet for IR_LBS_QUIET_US, for at most IR_LBS_MAX_WAIT_US (Ir-Lbs.h
+// decides; this loop supplies the clock, the pin's last edge and the sleeping). The edge timestamp is read before the
+// clock so it can never be ahead of it. After sendData or sendSony a board's own previous frame never holds this up: its
+// last edge is more than the 32.767 ms idle tail old by the time the call returned. sendNEC returns as soon as its frame
+// is queued, so a data frame sent right after it does wait for the echo of that NEC frame (the RMT queue would hold the
+// data frame behind it, and behind the idle tail of the NEC encoder's ending symbol, anyway).
+void IrRemoteTx::_listenBeforeSend(void)
+{
+    if (!_air)
+        return;
+
+    ir_lbs_t lbs;
+    ir_lbs_begin(&lbs, static_cast<uint32_t>(esp_timer_get_time()));
+    for (;;)
+    {
+        const uint32_t last_edge_us = _air->lastEdgeUs();
+        __asm__ volatile("memw" ::: "memory"); // the interrupt may run on another core: read the edge before the clock
+        const uint32_t now_us = static_cast<uint32_t>(esp_timer_get_time());
+
+        uint32_t wait_us = 0;
+        const ir_lbs_action_t action = ir_lbs_step(&lbs, now_us, last_edge_us, esp_random(), &wait_us);
+        if (action == IR_LBS_WAIT)
+        {
+            const TickType_t ticks = pdMS_TO_TICKS((wait_us + IR_US_PER_MS - 1) / IR_US_PER_MS); // round up; a wake-up a tick early just reads the air again
+            vTaskDelay(ticks > 0 ? ticks : 1);
+            continue;
+        }
+        if (lbs.deferred)
+            ESP_LOGD(TAG, "data frame %s after %lu us (jitter %lu us)", action == IR_LBS_SEND ? "sent" : "sent anyway",
+                     (unsigned long)(now_us - lbs.start_us), (unsigned long)lbs.jitter_us);
+        return;
+    }
+}
+
+// NOTE: blocks the caller for the listen-before-send wait (usually none) plus the whole frame (~frame duration).
+// Data uses the 38 kHz carrier; honors the range-carrier override exactly like sendNEC.
 bool IrRemoteTx::sendData(const uint8_t *bytes, uint8_t len)
 {
     if (len > IR_DATA_MAX_PAYLOAD)
         return false;
 
-    // Back off before taking the lock so a sender queued behind this one is not held up by the wait.
-    vTaskDelay(pdMS_TO_TICKS(esp_random() % (IR_DATA_TX_BACKOFF_MAX_MS + 1)));
-
     TxLock lock(_tx_lock);
-    uint32_t target = _carrierFor(IR_TX_CARRIER_FREQ_HZ_DATA);
-    if (_current_carrier_hz != target)
-        updateCarrierFrequency(target);
 
     size_t symbols = data_build_frame(_data_frame, bytes, len, _resolution);
     if (symbols == 0)
         return false;
+
+    // Listen last: only the carrier check (a compare, unless transmit_range changed it) sits between the air being
+    // read as clear and the frame going out. The lock comes first because the air has to be read by the task that
+    // is about to use it.
+    _listenBeforeSend();
+    uint32_t target = _carrierFor(IR_TX_CARRIER_FREQ_HZ_DATA);
+    if (_current_carrier_hz != target)
+        updateCarrierFrequency(target);
 
     ESP_LOGD(TAG, "send data frame: len=%u, symbols=%u", (unsigned)len, (unsigned)symbols);
     if (rmt_transmit(_channel, _copy_encoder, _data_frame, symbols * sizeof(rmt_symbol_word_t), &_transmit_config) != ESP_OK)
