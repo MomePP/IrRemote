@@ -22,3 +22,13 @@ An infrared remote library designed for use with ESP32S3 using Arduino Core vers
   receiver pin (`IrRemoteAir`); the decision logic is the pure `Ir-Lbs.h` (host test `test/host/test-ir-lbs.cpp` in
   the firmware repo). A board never waits for its own previous data frame: the transmit call returns only after the
   32.767 ms idle tail that every data frame ends with.
+- **TX range is a carrier detune.** `transmitRange(cm)` maps cm to a carrier through `IR_RANGE_CALIBRATION`
+  (`Remote-Tx.h`), linearly between points, clamped to the first and last cm. The receiver is tuned to 38 kHz, so
+  a lower carrier reaches less far. The override floor `IR_TX_CARRIER_FREQ_HZ_MIN` is 28 kHz.
+  The table is **provisional v1** (shipped in the GoGo 4.0.0 preview, to be recalibrated before 4.0.0 stable):
+  `30 cm -> 28 kHz` (guess), `400 cm -> 29 kHz` (lower bound), `800 cm -> 38 kHz` (guess).
+  It comes from one board hearing its own frames after a reflection (2026-10-30): a 400 cm round trip off a door
+  holds 70-80 % at 29.0 kHz and is gone at 28.2 kHz and below; a 310 cm round trip off a ceiling still gets 77-93 %
+  at 30 kHz. Those are reflected paths, so direct reach is longer; no direct distance has been measured yet.
+  Static asserts keep the table sorted, inside the carrier span, and keep a 560 us mark at the floor at or above
+  the receiver's 10-cycle minimum burst (IRM-H6XX datasheet), which a floor below 17.9 kHz would break.
