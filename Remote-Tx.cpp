@@ -6,6 +6,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "Ir-Lbs.h"
+#include "Ir-MemoryBarrier.h"
 static const char *TAG = "IrRemoteTx";
 
 static constexpr uint32_t IR_US_PER_MS = 1000;
@@ -197,7 +198,7 @@ void IrRemoteTx::_listenBeforeSend(void)
     for (;;)
     {
         const uint32_t last_edge_us = _air->lastEdgeUs();
-        __asm__ volatile("memw" ::: "memory"); // the interrupt may run on another core: read the edge before the clock
+        irMemoryBarrier(); // the interrupt may run on another core: read the edge before the clock
         const uint32_t now_us = static_cast<uint32_t>(esp_timer_get_time());
 
         uint32_t wait_us = 0;

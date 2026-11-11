@@ -1,4 +1,5 @@
 #include "Remote-Rx.h"
+#include "Ir-MemoryBarrier.h"
 
 #include "esp_log.h"
 static const char *TAG = "IrRemoteRx";
@@ -157,7 +158,7 @@ ir_data_rx_result IrRemoteRx::receiveDataOrNec(uint8_t *out, uint8_t *out_len, i
 
 void IrRemoteRx::_releaseBuffer(const rmt_symbol_word_t *symbols)
 {
-    __asm__ volatile("memw" ::: "memory"); // finish reading the symbols before the ISR may reuse them
+    irMemoryBarrier(); // finish reading the symbols before the ISR may reuse them
     _held[symbols == _symbols_buffer[1]] = false;
 }
 
@@ -172,7 +173,7 @@ void IrRemoteRx::_onReceiveDone(const rmt_rx_done_event_data_t *edata, BaseType_
     if (!_held[other])
     {
         _held[_fill_index] = true;
-        __asm__ volatile("memw" ::: "memory");
+        irMemoryBarrier();
         if (xQueueSendFromISR(_receive_queue, edata, high_task_wakeup) == pdPASS)
             _fill_index = other;
         else

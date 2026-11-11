@@ -7,6 +7,7 @@
 #include "Remote-Tx.h"
 
 #include "IrProtocol.h"
+#include "Ir-MemoryBarrier.h"
 
 class IrRemote
 {
@@ -28,7 +29,7 @@ public:
     void setProtocol(ir_remote_protocol irProtocol)
     {
         _ir_protocol = irProtocol;
-        __asm__ volatile("memw" ::: "memory");
+        irMemoryBarrier();
     }
     ir_remote_protocol getProtocol(void) { return _ir_protocol; }
 
