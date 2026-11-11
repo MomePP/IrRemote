@@ -28,6 +28,9 @@ void IrRemote::begin(ir_remote_protocol irProtocol, int txPin, int rxPin)
 
 bool IrRemote::getIrCode(uint32_t timeout_ms)
 {
+    if (_rxPin < 0)
+        return false;
+
     bool retrieved_status = false;
     switch (_ir_protocol)
     {
@@ -55,5 +58,5 @@ bool IrRemote::getIrCode(uint32_t timeout_ms)
 // was seen last, which made the same `ir_send_code N` go out as NEC or Sony depending on history.
 bool IrRemote::sendIrCode(ir_code_t send_code)
 {
-    return remoteTx.sendNEC(send_code.address, send_code.command);
+    return _txPin >= 0 && remoteTx.sendNEC(send_code.address, send_code.command);
 }

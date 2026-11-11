@@ -15,6 +15,8 @@ public:
     IrRemote(void);
     ~IrRemote(void);
 
+    // A negative pin leaves that side out: a remote with no transmitter sends nothing and one with no receiver
+    // receives nothing, and their calls report that without touching the RMT.
     void begin(ir_remote_protocol irProtocol, int txPin, int rxPin);
 
     bool getIrCode(uint32_t timeout);
@@ -40,18 +42,24 @@ public:
     // cross-core barrier is needed (unlike _ir_protocol, which the menu task also writes).
     ir_remote_protocol getDetectedProtocol(void) { return _detected_protocol; }
 
-    void transmitRange(uint16_t cm) { remoteTx.transmitRange(cm); }
+    void transmitRange(uint16_t cm)
+    {
+        if (_txPin >= 0)
+            remoteTx.transmitRange(cm);
+    }
     void clearTransmitRange(void)   { remoteTx.clearTransmitRange(); }
 
-    bool sendData(const uint8_t *bytes, uint8_t len) { return remoteTx.sendData(bytes, len); }
+    bool sendData(const uint8_t *bytes, uint8_t len) { return _txPin >= 0 && remoteTx.sendData(bytes, len); }
     bool receiveData(uint8_t *out, uint8_t *out_len, uint32_t timeout_ms)
     {
-        return remoteRx.receiveData(out, out_len, pdMS_TO_TICKS(timeout_ms));
+        return _rxPin >= 0 && remoteRx.receiveData(out, out_len, pdMS_TO_TICKS(timeout_ms));
     }
 
     // Data-mode poll that also hands over a NEC remote code (see IrRemoteRx::receiveDataOrNec).
     ir_data_rx_result receiveDataOrNec(uint8_t *out, uint8_t *out_len, ir_code_t *nec_code, uint32_t timeout_ms)
     {
+        if (_rxPin < 0)
+            return IR_DATA_RX_NONE;
         return remoteRx.receiveDataOrNec(out, out_len, nec_code, pdMS_TO_TICKS(timeout_ms));
     }
 
